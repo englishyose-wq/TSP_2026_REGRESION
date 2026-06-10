@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Power BI - Último Excel</title>
+    <style>
+        :root {
+            --bg: #eef4fa;
+            --card: #ffffff;
+            --ink: #152238;
+            --muted: #5a6675;
+            --accent: #1f77b4;
+        }
+        body {
+            margin: 0;
+            font-family: Georgia, "Times New Roman", serif;
+            background: radial-gradient(circle at top left, #f7fbff, var(--bg) 55%);
+            color: var(--ink);
+        }
+        .shell { padding: 20px; }
+        .card {
+            background: var(--card);
+            border: 1px solid #d9e5ef;
+            border-radius: 18px;
+            box-shadow: 0 18px 42px rgba(19, 37, 58, 0.08);
+            overflow: hidden;
+        }
+        .header {
+            padding: 18px 22px 10px;
+            border-bottom: 1px solid #e4edf5;
+        }
+        .header h1 { margin: 0 0 6px; font-size: 1.35rem; }
+        .header p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+        .content { padding: 14px 18px 18px; }
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+        .toolbar a {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 14px;
+            border-radius: 999px;
+            text-decoration: none;
+            background: var(--accent);
+            color: white;
+            font-weight: bold;
+            font-size: 0.95rem;
+        }
+        .meta {
+            margin-bottom: 12px;
+            color: var(--muted);
+            font-size: 0.95rem;
+        }
+        .table-wrap {
+            overflow: auto;
+            border: 1px solid #d9e5ef;
+            border-radius: 12px;
+        }
+        table.data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        table.data-table th,
+        table.data-table td {
+            border-bottom: 1px solid #e4edf5;
+            padding: 8px 10px;
+            text-align: left;
+            white-space: nowrap;
+        }
+        table.data-table th {
+            background: #f3f8fc;
+            position: sticky;
+            top: 0;
+        }
+        .empty {
+            min-height: 280px;
+            display: grid;
+            place-items: center;
+            border: 2px dashed #c8d6e4;
+            border-radius: 14px;
+            color: var(--muted);
+            background: linear-gradient(180deg, #fbfdff, #f3f7fb);
+            text-align: center;
+            padding: 24px;
+        }
+        .empty strong {
+            display: block;
+            color: var(--ink);
+            font-size: 1.05rem;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="card">
+            <div class="header">
+                <h1>Último Excel para Power BI</h1>
+                <p>Vista en tabla del archivo más reciente guardado en la base de datos.</p>
+            </div>
+            <div class="content">
+                <div class="toolbar">
+                    <a href="/powerbi/">Ver gráfica</a>
+                    <a href="/powerbi/data.csv">Descargar CSV</a>
+                    <a href="/regression/">Subir nuevo Excel</a>
+                </div>
+                {% if has_excel %}
+                    <div class="meta">
+                        Archivo: <strong>{{ excel_filename }}</strong>
+                        {% if excel_sheet %} | Hoja: <strong>{{ excel_sheet }}</strong>{% endif %}
+                        | Filas: <strong>{{ total_rows }}</strong>
+                        {% if truncated %}
+                            (mostrando las primeras {{ preview_limit }})
+                        {% endif %}
+                    </div>
+                    <div class="table-wrap">
+                        {{ table_html|safe }}
+                    </div>
+                {% else %}
+                    <div class="empty">
+                        <div>
+                            <strong>Aún no hay un Excel guardado</strong>
+                            <div>Sube un archivo en regresión, comparación o finos. Después vuelve aquí.</div>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -104,7 +104,14 @@
                     <a href="/regression/">Ir a regresión</a>
                     <a href="/fines/">Ir a finos</a>
                     <a href="/comparison/">Ir a comparación</a>
+                    {% if has_excel %}
+                        <a href="/powerbi/excel/">Ver último Excel</a>
+                        <a href="/powerbi/data.csv">CSV para Power BI</a>
+                    {% endif %}
                 </div>
+                {% if has_excel %}
+                    <p class="note">Excel guardado: <strong>{{ excel_filename }}</strong>{% if excel_sheet %} (hoja {{ excel_sheet }}){% endif %}</p>
+                {% endif %}
                 {% if has_plot %}
                     <div class="plot-wrap">
                         {{ plot_html|safe }}

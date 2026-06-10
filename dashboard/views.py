@@ -2,6 +2,7 @@ import base64
 from pathlib import Path
 
 import pandas as pd
+from django.http import HttpResponse
 from django.shortcuts import render
 
 from models.regression import analyze_target
@@ -14,6 +15,13 @@ from utils.plotting import (
 )
 
 from .forms import FinesUploadForm, UploadForm
+from .persistence import (
+    load_latest_upload_metadata,
+    load_plot_html,
+    load_uploaded_file,
+    save_plot_html,
+    save_uploaded_file,
+)
 
 
 UPLOAD_SESSION_KEY = "dashboard_uploaded_file"
@@ -62,6 +70,7 @@ def _store_uploaded_file(request, uploaded_file, sheet_name=None):
         request.session[UPLOAD_SHEET_SESSION_KEY] = resolved_sheet
     else:
         request.session.pop(UPLOAD_SHEET_SESSION_KEY, None)
+    save_uploaded_file(file_bytes, uploaded_file.name, resolved_sheet)
     df = load_dataframe_from_bytes(file_bytes, uploaded_file.name, sheet_name=resolved_sheet)
     return df, sheet_names, resolved_sheet
 
@@ -70,10 +79,19 @@ def _load_session_dataframe(request, sheet_name=None):
     encoded_file = request.session.get(UPLOAD_SESSION_KEY)
     filename = request.session.get(UPLOAD_NAME_SESSION_KEY)
     if not encoded_file or not filename:
-        raise ValueError("Primero sube un archivo CSV o Excel.")
-    file_bytes = _decode_file_bytes(encoded_file)
+        file_bytes, filename, stored_sheet = load_uploaded_file()
+        if not file_bytes or not filename:
+            raise ValueError("Primero sube un archivo CSV o Excel.")
+        request.session[UPLOAD_SESSION_KEY] = _encode_file_bytes(file_bytes)
+        request.session[UPLOAD_NAME_SESSION_KEY] = filename
+        if stored_sheet:
+            request.session[UPLOAD_SHEET_SESSION_KEY] = stored_sheet
+        request.session.modified = True
+    else:
+        file_bytes = _decode_file_bytes(encoded_file)
+        stored_sheet = request.session.get(UPLOAD_SHEET_SESSION_KEY)
     sheet_names = get_excel_sheet_names_from_bytes(file_bytes, filename)
-    resolved_sheet = sheet_name or request.session.get(UPLOAD_SHEET_SESSION_KEY)
+    resolved_sheet = sheet_name or request.session.get(UPLOAD_SHEET_SESSION_KEY) or stored_sheet
     if resolved_sheet is None and sheet_names:
         resolved_sheet = sheet_names[0]
     if resolved_sheet:
@@ -162,16 +180,16 @@ def _apply_column_exclusions(df, excluded_columns):
 
 
 def _save_latest_plot_html(plot_html):
-    if not plot_html:
-        return
-    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-    LATEST_POWERBI_PLOT_PATH.write_text(plot_html, encoding="utf-8")
+    save_plot_html(plot_html)
 
 
 def _load_latest_plot_html():
-    if not LATEST_POWERBI_PLOT_PATH.exists():
-        return None
-    return LATEST_POWERBI_PLOT_PATH.read_text(encoding="utf-8")
+    plot_html = load_plot_html()
+    if plot_html:
+        return plot_html
+    if LATEST_POWERBI_PLOT_PATH.exists():
+        return LATEST_POWERBI_PLOT_PATH.read_text(encoding="utf-8")
+    return None
 
 
 def _parse_fixed_c(post_data):
@@ -877,17 +895,68 @@ def fines_view(request):
     return render(request, "fines.html", context)
 
 
+def _load_latest_dataframe():
+    file_bytes, filename, sheet_name = load_uploaded_file()
+    if not file_bytes or not filename:
+        return None, None, None
+    df = load_dataframe_from_bytes(file_bytes, filename, sheet_name=sheet_name)
+    return df, filename, sheet_name
+
+
 def powerbi_view(request):
     """Vista pública mínima para Power BI con la última gráfica generada."""
     plot_html = _load_latest_plot_html()
+    filename, sheet_name, _ = load_latest_upload_metadata()
     return render(
         request,
         "powerbi.html",
         {
             "plot_html": plot_html,
             "has_plot": bool(plot_html),
+            "has_excel": bool(filename),
+            "excel_filename": filename,
+            "excel_sheet": sheet_name,
         },
     )
+
+
+def powerbi_excel_view(request):
+    """Tabla HTML del último Excel para embeber en Power BI."""
+    df, filename, sheet_name = _load_latest_dataframe()
+    preview_limit = 200
+    table_html = None
+    total_rows = 0
+    if df is not None:
+        total_rows = len(df)
+        table_html = df.head(preview_limit).to_html(classes="data-table", index=False, border=0)
+    return render(
+        request,
+        "powerbi_excel.html",
+        {
+            "table_html": table_html,
+            "has_excel": df is not None,
+            "excel_filename": filename,
+            "excel_sheet": sheet_name,
+            "total_rows": total_rows,
+            "preview_limit": preview_limit,
+            "truncated": total_rows > preview_limit,
+        },
+    )
+
+
+def powerbi_data_csv_view(request):
+    """CSV del último Excel para importar en Power BI con 'Obtener datos desde Web'."""
+    df, filename, _sheet_name = _load_latest_dataframe()
+    if df is None:
+        return HttpResponse(
+            "No hay un Excel guardado todavía.\n",
+            content_type="text/plain; charset=utf-8",
+            status=404,
+        )
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = 'inline; filename="ultimo_excel.csv"'
+    df.to_csv(path_or_buf=response, index=False)
+    return response
 
 
 def index(request):
