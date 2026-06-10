@@ -1,0 +1,1283 @@
+from pathlib import Path
+
+import re
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.io import to_html
+
+from models.regression import predict
+from utils.metrics import r2_score, rmse
+
+
+def plot_model_comparison(
+    x,
+    y,
+    results,
+    xlabel: str,
+    ylabel: str,
+    title: str | None = None,
+    equation_text: str | None = None,
+    r2_value: float | None = None,
+    rmse_value: float | None = None,
+    mape_value: float | None = None,
+    data_label: str = "Datos experimentales",
+    point_labels: np.ndarray | None = None,
+    fines: np.ndarray | None = None,
+):
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    x_line = np.linspace(np.min(x), np.max(x), 200)
+    fig = go.Figure()
+    
+    # Verificar si hay labels para colorear por prefijo (distrito)
+    has_labels = point_labels is not None and len(point_labels) > 0 and len(point_labels) == len(x)
+    
+    prefix_counts = None
+    prefix_order = None
+    prefix_color_map = None
+    if has_labels:
+        # Extraer prefijos (ej: "CH" de "CH-1", "VEN" de "VEN-2")
+        prefix_dict = {}
+        for i, label in enumerate(point_labels):
+            label_str = str(label).strip()
+            match = re.match(r"([A-Z]+)", label_str)
+            prefix = match.group(1) if match else "OTRO"
+            
+            if prefix not in prefix_dict:
+                prefix_dict[prefix] = {"indices": [], "labels": []}
+            prefix_dict[prefix]["indices"].append(i)
+            prefix_dict[prefix]["labels"].append(label_str)
+        prefix_counts = {prefix: len(data["indices"]) for prefix, data in prefix_dict.items()}
+        prefix_order = list(prefix_dict.keys())
+        
+        # Paleta de colores por prefijo (distritos)
+        color_palette = [
+            "#1f4e79",  # Azul oscuro
+            "#c00000",  # Rojo
+            "#70ad47",  # Verde
+            "#ffc000",  # Naranja
+            "#5b9bd5",  # Azul claro
+            "#ed7d31",  # Naranja oscuro
+            "#a5a5a5",  # Gris
+            "#44546a",  # Gris azulado
+            "#e2efda",  # Verde claro
+            "#fce4d6",  # Salmón
+        ]
+        
+        # Agregar un trace por prefijo con color diferente
+        prefix_color_map = {}
+        for idx, (prefix, data) in enumerate(prefix_dict.items()):
+            indices = np.array(data["indices"])
+            labels = data["labels"]
+            color = color_palette[idx % len(color_palette)]
+            prefix_color_map[prefix] = color
+            
+            fig.add_trace(
+                go.Scatter(
+                    x=x[indices],
+                    y=y[indices],
+                    mode="markers+text",
+                    text=labels,
+                    textposition="top center",
+                    textfont={"size": 10, "color": color},
+                    name=prefix,  # Aparecerá en la leyenda
+                    marker={
+                        "color": color,
+                        "size": 9,
+                        "line": {"color": "#ffffff", "width": 1.2},
+                        "opacity": 0.95,
+                    },
+                    hovertemplate="%{text}<br>N60: %{x:.2f}<br>φ: %{y:.2f}<extra></extra>",
+                )
+            )
+    else:
+        # Si no hay labels, agregar todos los puntos con un color
+        fig.add_trace(
+            go.Scatter(
+                x=x,
+                y=y,
+                mode="markers",
+                name=data_label,
+                marker={
+                    "color": "#1f4e79",
+                    "size": 9,
+                    "line": {"color": "#ffffff", "width": 1.2},
+                    "opacity": 0.95,
+                },
+                hovertemplate="N60: %{x:.2f}<br>φ: %{y:.2f}<extra></extra>",
+            )
+        )
+
+    fines_mean = None
+    if fines is not None and len(fines) > 0:
+        fines_mean = float(np.mean(fines))
+
+    # Barras de dispersión: mismo color que el punto según código/prefijo
+    best_model = max(results, key=lambda r: r.r2)
+    y_pred = predict(best_model, x)
+
+    def _add_residual_bars_2d(indices, color):
+        res_x, res_y = [], []
+        for i in indices:
+            res_x.extend([x[i], x[i], None])
+            res_y.extend([y[i], y_pred[i], None])
+        if not res_x:
+            return
+        fig.add_trace(
+            go.Scatter(
+                x=res_x,
+                y=res_y,
+                mode="lines",
+                name="Barras de dispersión",
+                line={"color": color, "width": 1.8, "dash": "dot"},
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+
+    if has_labels:
+        for prefix, data in prefix_dict.items():
+            _add_residual_bars_2d(data["indices"], prefix_color_map[prefix])
+    else:
+        _add_residual_bars_2d(list(range(len(x))), "#1f4e79")
+
+    for res in results:
+        # Predicción de la línea de regresión
+        if res.model_type == "sqrt_fines":
+            if fines_mean is None:
+                continue
+            y_line = res.params["a"] * np.sqrt(x_line) + res.params["b"] * fines_mean + res.params["c"]
+            trace_name = f"{res.name} (FC={fines_mean:.1f})"
+        else:
+            y_line = predict(res, x_line)
+            trace_name = res.name
+
+        # Añadir la línea de regresión
+        fig.add_trace(
+            go.Scatter(
+                x=x_line,
+                y=y_line,
+                mode="lines",
+                name=trace_name,
+                line={"color": "#8b1e3f", "width": 3},
+                hoverinfo="skip",
+            )
+        )
+
+    title_band_color = "#1f4e79"
+    title_text_color = "#ffffff"
+    annotations = []
+    if title:
+        annotations.append(
+            {
+                "x": 0.5,
+                "y": 1.08,
+                "xref": "paper",
+                "yref": "paper",
+                "text": title,
+                "showarrow": False,
+                "align": "center",
+                "yanchor": "middle",
+                "font": {
+                    "family": "Times New Roman, Georgia, serif",
+                    "size": 22,
+                    "color": title_text_color,
+                },
+            }
+        )
+
+    stats_lines = []
+    if equation_text:
+        stats_lines.append(equation_text)
+    if r2_value is not None:
+        stats_lines.append(f"R² = {r2_value:.4f}")
+    if rmse_value is not None:
+        stats_lines.append(f"RMSE = {rmse_value:.4f}")
+    if mape_value is not None:
+        stats_lines.append(f"Dispersión = {mape_value:.2f}%")
+    if stats_lines:
+        annotations.append(
+            {
+                "x": 0.96,
+                "y": 0.93,
+                "xref": "paper",
+                "yref": "paper",
+                "text": "<br>".join(stats_lines),
+                "showarrow": False,
+                "align": "center",
+                "bgcolor": "rgba(255,255,255,0.9)",
+                "bordercolor": "#2f3b52",
+                "borderwidth": 1.2,
+                "borderpad": 8,
+                "font": {
+                    "size": 13,
+                    "color": "#1b1b1b",
+                    "family": "Times New Roman, Georgia, serif",
+                },
+            }
+        )
+
+    fig.update_layout(
+        title={"text": ""},
+        xaxis={
+            "title": {
+                "text": xlabel,
+                "font": {
+                    "family": "Times New Roman, Georgia, serif",
+                    "size": 18,
+                    "color": "#111111",
+                },
+            },
+            "domain": [0.0, 0.72],
+            "showgrid": True,
+            "gridwidth": 1,
+            "gridcolor": "#e7e7e7",
+            "tickfont": {"family": "Times New Roman, Georgia, serif", "size": 13},
+            "zeroline": False,
+            "showline": True,
+            "linecolor": "#2f3b52",
+            "linewidth": 1.6,
+            "mirror": True,
+        },
+        yaxis={
+            "title": {
+                "text": ylabel,
+                "font": {
+                    "family": "Times New Roman, Georgia, serif",
+                    "size": 18,
+                    "color": "#111111",
+                },
+            },
+            "showgrid": True,
+            "gridwidth": 1,
+            "gridcolor": "#e7e7e7",
+            "tickfont": {"family": "Times New Roman, Georgia, serif", "size": 13},
+            "zeroline": False,
+            "showline": True,
+            "linecolor": "#2f3b52",
+            "linewidth": 1.6,
+            "mirror": True,
+        },
+        template="plotly_white",
+        font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
+        showlegend=not has_labels,
+        legend={
+            "orientation": "h",
+            "x": 0.99,
+            "xanchor": "right",
+            "y": 0.06,
+            "yanchor": "bottom",
+            "bgcolor": "rgba(255, 255, 255, 0.9)",
+            "bordercolor": "#c7c7c7",
+            "borderwidth": 1,
+            "font": {"family": "Times New Roman, Georgia, serif", "size": 15},
+        },
+        annotations=annotations,
+        shapes=(
+            [
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.0,
+                    "x1": 1.0,
+                    "y0": 1.02,
+                    "y1": 1.14,
+                    "fillcolor": title_band_color,
+                    "line": {"width": 0},
+                },
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.76,
+                    "x1": 1.0,
+                    "y0": 0.0,
+                    "y1": 1.0,
+                    "fillcolor": "rgba(245,247,250,0.95)",
+                    "layer": "below",
+                    "line": {"color": "#c7c7c7", "width": 1},
+                },
+            ]
+            if title
+            else [
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.76,
+                    "x1": 1.0,
+                    "y0": 0.0,
+                    "y1": 1.0,
+                    "fillcolor": "rgba(245,247,250,0.95)",
+                    "layer": "below",
+                    "line": {"color": "#c7c7c7", "width": 1},
+                }
+            ]
+        ),
+        margin={"l": 90, "r": 40, "t": 160, "b": 80},
+        height=640,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+    )
+
+    if prefix_counts:
+        values = [prefix_counts[p] for p in (prefix_order or prefix_counts.keys())]
+        total_points = sum(values)
+        text_positions = [
+            "outside" if (value / total_points * 100) < 6 else "inside"
+            for value in values
+        ]
+        fig.add_trace(
+            go.Pie(
+                labels=prefix_order or list(prefix_counts.keys()),
+                values=values,
+                hole=0.25,
+                textinfo="label+percent",
+                textposition=text_positions,
+                marker={
+                    "colors": [prefix_color_map[p] for p in (prefix_order or prefix_counts.keys())],
+                    "line": {"color": "#2f3b52", "width": 1},
+                }
+                if prefix_color_map
+                else None,
+                domain={"x": [0.80, 0.98], "y": [0.12, 0.55]},
+                sort=False,
+            )
+        )
+        fig.add_annotation(
+            x=0.95,
+            y=0.58,
+            xref="paper",
+            yref="paper",
+            text=f"Total de puntos: {total_points}",
+            showarrow=False,
+            align="center",
+            bgcolor="rgba(255,255,255,0.9)",
+            bordercolor="#c7c7c7",
+            borderwidth=1,
+            borderpad=4,
+            font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
+        )
+
+    return to_html(
+        fig,
+        include_plotlyjs="cdn",
+        full_html=False,
+        config={
+            "displaylogo": False,
+            "editable": False,
+            "scrollZoom": False,
+            "responsive": True,
+        },
+    )
+
+
+def plot_model_comparison_3d(
+    x,
+    fines,
+    y,
+    result,
+    xlabel: str,
+    ylabel: str,
+    zlabel: str,
+    title: str | None = None,
+    equation_text: str | None = None,
+    r2_value: float | None = None,
+    rmse_value: float | None = None,
+    mape_value: float | None = None,
+    point_labels: np.ndarray | None = None,
+):
+    x = np.asarray(x, dtype=float)
+    fines = np.asarray(fines, dtype=float)
+    y = np.asarray(y, dtype=float)
+
+    x_grid = np.linspace(np.min(x), np.max(x), 40)
+    fines_grid = np.linspace(np.min(fines), np.max(fines), 40)
+    xx, ff = np.meshgrid(x_grid, fines_grid)
+
+    a = result.params["a"]
+    b = result.params["b"]
+    c = result.params["c"]
+    zz = a * np.sqrt(xx) + b * ff + c
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Surface(
+            x=xx,
+            y=ff,
+            z=zz,
+            colorscale=[
+                [0.0, "#2b6ea6"],
+                [0.5, "#3f86bf"],
+                [1.0, "#76b5e6"],
+            ],
+            opacity=0.82,
+            showscale=False,
+            name="Superficie",
+            hovertemplate="N60: %{x:.2f}<br>Finos (FC, %): %{y:.2f}<br>φ: %{z:.2f}<extra>Superficie</extra>",
+        )
+    )
+    has_labels = point_labels is not None and len(point_labels) > 0 and len(point_labels) == len(x)
+    prefix_counts = None
+    prefix_order = None
+    prefix_color_map = None
+    if has_labels:
+        prefix_dict = {}
+        for i, label in enumerate(point_labels):
+            label_str = str(label).strip()
+            match = re.match(r"([A-Z]+)", label_str)
+            prefix = match.group(1) if match else "OTRO"
+            if prefix not in prefix_dict:
+                prefix_dict[prefix] = {"indices": [], "labels": []}
+            prefix_dict[prefix]["indices"].append(i)
+            prefix_dict[prefix]["labels"].append(label_str)
+
+        prefix_counts = {prefix: len(data["indices"]) for prefix, data in prefix_dict.items()}
+        prefix_order = list(prefix_dict.keys())
+
+        color_palette = [
+            "#1f4e79",
+            "#c00000",
+            "#70ad47",
+            "#ffc000",
+            "#5b9bd5",
+            "#ed7d31",
+            "#a5a5a5",
+            "#44546a",
+            "#8b1e3f",
+            "#2f3b52",
+        ]
+
+        prefix_color_map = {}
+        for idx, (prefix, data) in enumerate(prefix_dict.items()):
+            indices = np.array(data["indices"])
+            labels = data["labels"]
+            color = color_palette[idx % len(color_palette)]
+            prefix_color_map[prefix] = color
+            fig.add_trace(
+                go.Scatter3d(
+                    x=x[indices],
+                    y=fines[indices],
+                    z=y[indices],
+                    mode="markers+text",
+                    text=labels,
+                    textposition="top center",
+                    textfont={"size": 9, "color": color},
+                    name=prefix,
+                    marker={"size": 4, "color": color},
+                    hovertemplate="%{text}<br>N60: %{x:.2f}<br>Finos (FC, %): %{y:.2f}<br>φ: %{z:.2f}<extra></extra>",
+                )
+            )
+    else:
+        fig.add_trace(
+            go.Scatter3d(
+                x=x,
+                y=fines,
+                z=y,
+                mode="markers",
+                name="Datos",
+                marker={"size": 4, "color": "#8b1e3f"},
+                hovertemplate="N60: %{x:.2f}<br>Finos (FC, %): %{y:.2f}<br>φ: %{z:.2f}<extra>Datos</extra>",
+            )
+        )
+
+    z_pred = a * np.sqrt(x) + b * fines + c
+    points_per_bar = 6
+
+    def _add_residual_bars_3d(indices, color):
+        res_x, res_y, res_z = [], [], []
+        for i in indices:
+            z_seg = np.linspace(y[i], z_pred[i], points_per_bar)
+            res_x.extend([x[i]] * points_per_bar + [None])
+            res_y.extend([fines[i]] * points_per_bar + [None])
+            res_z.extend(list(z_seg) + [None])
+        if not res_x:
+            return
+        fig.add_trace(
+            go.Scatter3d(
+                x=res_x,
+                y=res_y,
+                z=res_z,
+                mode="lines+markers",
+                name="Barras de dispersión",
+                line={"color": color, "width": 2, "dash": "dot"},
+                marker={"size": 2, "color": color, "symbol": "circle"},
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+
+    if has_labels:
+        for prefix, data in prefix_dict.items():
+            _add_residual_bars_3d(data["indices"], prefix_color_map[prefix])
+    else:
+        _add_residual_bars_3d(list(range(len(x))), "#8b1e3f")
+
+    title_band_color = "#1f4e79"
+    title_text_color = "#ffffff"
+    annotations = []
+    if title:
+        annotations.append(
+            {
+                "x": 0.5,
+                "y": 1.08,
+                "xref": "paper",
+                "yref": "paper",
+                "text": title,
+                "showarrow": False,
+                "align": "center",
+                "yanchor": "middle",
+                "font": {
+                    "family": "Times New Roman, Georgia, serif",
+                    "size": 22,
+                    "color": title_text_color,
+                },
+            }
+        )
+
+    if equation_text is None:
+        equation_text = result.equation
+
+    stats_lines = []
+    if equation_text:
+        split_equation = equation_text.replace(
+            "*sqrt(N<sub>60</sub>) ", "*sqrt(N<sub>60</sub>)<br>", 1
+        )
+        stats_lines.append(f"<b><span style='color:#1f4e79'>{split_equation}</span></b>")
+    if r2_value is not None:
+        stats_lines.append(f"R² = {r2_value:.4f}")
+    if rmse_value is not None:
+        stats_lines.append(f"RMSE = {rmse_value:.4f}")
+    if mape_value is not None:
+        stats_lines.append(f"Dispersión = {mape_value:.2f}%")
+    if stats_lines:
+        annotations.append(
+            {
+                "x": 0.96,
+                "y": 0.93,
+                "xref": "paper",
+                "yref": "paper",
+                "text": "<br>".join(stats_lines),
+                "showarrow": False,
+                "align": "center",
+                "bgcolor": "rgba(255,255,255,0.9)",
+                "bordercolor": "#2f3b52",
+                "borderwidth": 1.2,
+                "borderpad": 8,
+                "font": {
+                    "size": 13,
+                    "color": "#1b1b1b",
+                    "family": "Times New Roman, Georgia, serif",
+                },
+            }
+        )
+
+    x_range = float(np.ptp(x)) or 1.0
+    fines_range = float(np.ptp(fines)) or 1.0
+    z_range = float(np.ptp(y)) or 1.0
+
+    fig.update_layout(
+        title={"text": ""},
+        scene={
+            "aspectmode": "manual",
+            "aspectratio": {"x": x_range, "y": fines_range, "z": z_range},
+            "xaxis": {
+                "title": xlabel,
+                "titlefont": {"size": 14},
+                "tickfont": {"size": 11, "color": "#111111"},
+                "showline": True,
+                "linecolor": "#1f2a3a",
+                "linewidth": 2,
+                "gridcolor": "#9aa7b4",
+                "gridwidth": 2,
+                "zeroline": False,
+            },
+            "yaxis": {
+                "title": ylabel,
+                "titlefont": {"size": 14},
+                "tickfont": {"size": 11, "color": "#111111"},
+                "showline": True,
+                "linecolor": "#1f2a3a",
+                "linewidth": 2,
+                "gridcolor": "#9aa7b4",
+                "gridwidth": 2,
+                "zeroline": False,
+            },
+            "zaxis": {
+                "title": zlabel,
+                "titlefont": {"size": 14},
+                "tickfont": {"size": 11, "color": "#111111"},
+                "showline": True,
+                "linecolor": "#1f2a3a",
+                "linewidth": 2,
+                "gridcolor": "#9aa7b4",
+                "gridwidth": 2,
+                "zeroline": False,
+            },
+            "domain": {"x": [0.0, 0.72], "y": [0.0, 1.0]},
+        },
+        scene_dragmode="orbit",
+        margin={"l": 90, "r": 40, "t": 160, "b": 80},
+        height=640,
+        template="plotly_white",
+        font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
+        showlegend=False,
+        annotations=annotations,
+        shapes=(
+            [
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.0,
+                    "x1": 1.0,
+                    "y0": 1.02,
+                    "y1": 1.14,
+                    "fillcolor": title_band_color,
+                    "line": {"width": 0},
+                },
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.76,
+                    "x1": 1.0,
+                    "y0": 0.0,
+                    "y1": 1.0,
+                    "fillcolor": "rgba(245,247,250,0.95)",
+                    "layer": "below",
+                    "line": {"color": "#c7c7c7", "width": 1},
+                }
+            ]
+            if title
+            else [
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.76,
+                    "x1": 1.0,
+                    "y0": 0.0,
+                    "y1": 1.0,
+                    "fillcolor": "rgba(245,247,250,0.95)",
+                    "layer": "below",
+                    "line": {"color": "#c7c7c7", "width": 1},
+                }
+            ]
+        ),
+    )
+
+    if prefix_counts:
+        values = [prefix_counts[p] for p in (prefix_order or prefix_counts.keys())]
+        total_points = sum(values)
+        text_positions = [
+            "outside" if (value / total_points * 100) < 6 else "inside"
+            for value in values
+        ]
+        fig.add_trace(
+            go.Pie(
+                labels=prefix_order or list(prefix_counts.keys()),
+                values=values,
+                hole=0.25,
+                textinfo="label+percent",
+                textposition=text_positions,
+                marker={
+                    "colors": [prefix_color_map[p] for p in (prefix_order or prefix_counts.keys())],
+                    "line": {"color": "#2f3b52", "width": 1},
+                }
+                if prefix_color_map
+                else None,
+                domain={"x": [0.80, 0.98], "y": [0.12, 0.55]},
+                sort=False,
+            )
+        )
+        fig.add_annotation(
+            x=0.95,
+            y=0.58,
+            xref="paper",
+            yref="paper",
+            text=f"Total de puntos: {total_points}",
+            showarrow=False,
+            align="center",
+            bgcolor="rgba(255,255,255,0.9)",
+            bordercolor="#c7c7c7",
+            borderwidth=1,
+            borderpad=4,
+            font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
+        )
+
+    return to_html(
+        fig,
+        include_plotlyjs="cdn",
+        full_html=False,
+        config={
+            "displaylogo": False,
+            "editable": False,
+            "scrollZoom": True,
+            "responsive": True,
+        },
+    )
+
+
+def plot_author_comparison(
+    x,
+    your_y,
+    your_column_name,
+    comparison_series,
+    field_points_x,
+    field_points_y,
+    x_label,
+    ylabel,
+    title,
+    target_type="phi",
+    r2_by_series=None,
+    r2_your=None,
+    fines_low=None,
+    fines_high=None,
+    fines_low_label=None,
+    fines_high_label=None,
+    show_fines_band=False,
+):
+    """
+    Genera grafica de comparacion de correlaciones con colores distintos.
+    
+    Args:
+        x: numpy array con valores de N60
+        your_y: numpy array con tu correlacion
+        your_column_name: nombre de tu columna
+        comparison_series: dict con {nombre_autor: valores}
+        x_label: etiqueta para eje X
+        ylabel: etiqueta para eje Y (con unidades)
+        title: titulo del grafico
+        target_type: 'phi'
+    """
+    fig = go.Figure()
+    
+    # Paleta de colores y estilos de linea distintos para cada serie
+    palette = [
+        "#1f77b4",  # blue
+        "#ff7f0e",  # orange
+        "#2ca02c",  # green
+        "#d62728",  # red
+        "#9467bd",  # purple
+        "#8c564b",  # brown
+        "#e377c2",  # pink
+        "#7f7f7f",  # gray
+        "#bcbd22",  # olive
+        "#17becf",  # cyan
+    ]
+    dash_styles = [
+        "solid",
+        "dash",
+        "dot",
+        "dashdot",
+        "longdash",
+        "longdashdot",
+        "dash",
+        "dot",
+        "longdash",
+        "dashdot",
+    ]
+    
+    def _wrap_legend_label(text, max_len=30):
+        if not text:
+            return text
+        base_text = text
+        r2_text = ""
+        if " (R²" in text:
+            base_text, r2_text = text.split(" (R²", 1)
+            r2_text = "(R²" + r2_text
+        words = base_text.split()
+        lines = []
+        current = ""
+        for word in words:
+            if not current:
+                current = word
+                continue
+            if len(current) + len(word) + 1 <= max_len:
+                current = f"{current} {word}"
+            else:
+                lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
+        if r2_text:
+            lines.append(r2_text)
+        return "<br>".join(lines)
+
+    # Agregar series de comparacion (autores) con colores distintos
+    color_idx = 0
+    for col_name, col_values in comparison_series.items():
+        if col_name != your_column_name and len(col_values) > 0:
+            r2_text = ""
+            if r2_by_series and col_name in r2_by_series:
+                r2_text = f" (R²={r2_by_series[col_name]:.4f})"
+            fig.add_trace(
+                go.Scatter(
+                    x=x,
+                    y=col_values,
+                    mode="lines+markers",
+                    name=_wrap_legend_label(f"{col_name}{r2_text}"),
+                    line={
+                        "color": palette[color_idx % len(palette)],
+                        "width": 2,
+                        "dash": dash_styles[color_idx % len(dash_styles)],
+                    },
+                    marker={"size": 5},
+                )
+            )
+            color_idx += 1
+
+    # Agregar banda de finos si aplica
+    def _format_fines_label(value):
+        if value is None:
+            return None
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+        if 0 <= numeric <= 1:
+            return f"{numeric * 100:.0f}%"
+        return f"{numeric:.0f}%" if numeric <= 100 else str(value)
+
+    if show_fines_band and fines_low is not None and fines_high is not None:
+        low_label = _format_fines_label(fines_low_label) or "Finos bajos"
+        high_label = _format_fines_label(fines_high_label) or "Finos altos"
+        fig.add_trace(
+            go.Scatter(
+                x=x,
+                y=fines_low,
+                mode="lines",
+                name=low_label,
+                line={"color": "#5b9bd5", "width": 2, "dash": "dot"},
+                showlegend=False,
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=x,
+                y=fines_high,
+                mode="lines",
+                name=high_label,
+                fill="tonexty",
+                fillcolor="rgba(91, 155, 213, 0.18)",
+                line={"color": "#2b6ea6", "width": 2, "dash": "dash"},
+                showlegend=False,
+            )
+        )
+
+    # Agregar tu correlacion en ultimo lugar (mismo grosor que las demas series)
+    if len(your_y) > 0:
+        your_r2_text = ""
+        if r2_your is not None:
+            your_r2_text = f" (R²={r2_your:.4f})"
+        fig.add_trace(
+            go.Scatter(
+                x=x,
+                y=your_y,
+                mode="lines+markers",
+                name=_wrap_legend_label(f"{your_column_name}{your_r2_text}"),
+                line={"color": "#8b1e3f", "width": 2, "dash": "dash"},
+                marker={"size": 5, "color": "#8b1e3f"},
+            )
+        )
+
+    # Agregar puntos de campo/ensayo
+    if len(field_points_x) > 0 and len(field_points_y) > 0:
+        fig.add_trace(
+            go.Scatter(
+                x=field_points_x,
+                y=field_points_y,
+                mode="markers",
+                name="Puntos de ensayo",
+                marker={"size": 9, "color": "#111111", "line": {"color": "#ffffff", "width": 1}},
+            )
+        )
+    
+    title_band_color = "#1f4e79"
+    title_text_color = "#ffffff"
+    annotations = []
+    if title:
+        annotations.append(
+            {
+                "x": 0.5,
+                "y": 1.08,
+                "xref": "paper",
+                "yref": "paper",
+                "text": title,
+                "showarrow": False,
+                "align": "center",
+                "yanchor": "middle",
+                "font": {
+                    "family": "Times New Roman, Georgia, serif",
+                    "size": 22,
+                    "color": title_text_color,
+                },
+            }
+        )
+
+    fig.update_layout(
+        title={"text": ""},
+        xaxis_title=x_label or "Numero de golpes corregido, N<sub>60</sub>",
+        yaxis_title=ylabel or "Valor",
+        hovermode="x unified",
+        template="plotly_white",
+        height=600,
+        showlegend=True,
+        legend={
+            "x": 0.88,
+            "y": 0.97,
+            "xanchor": "center",
+            "yanchor": "top",
+            "bgcolor": "rgba(255,255,255,0.96)",
+            "bordercolor": "#4a4a4a",
+            "borderwidth": 1.2,
+            "tracegroupgap": 6,
+            "font": {"family": "Times New Roman, Georgia, serif", "size": 11, "color": "#111111"},
+        },
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font={"family": "Times New Roman, Georgia, serif", "size": 13, "color": "#111111"},
+        xaxis={
+            "title": {
+                "font": {"family": "Times New Roman, Georgia, serif", "size": 18, "color": "#111111"}
+            },
+            "domain": [0.0, 0.68],
+            "showgrid": True,
+            "gridwidth": 1,
+            "gridcolor": "#e0e0e0",
+            "zeroline": False,
+            "showline": True,
+            "linecolor": "#2f3b52",
+            "linewidth": 1.4,
+            "tickfont": {"family": "Times New Roman, Georgia, serif", "size": 14, "color": "#111111"},
+        },
+        yaxis={
+            "title": {
+                "font": {"family": "Times New Roman, Georgia, serif", "size": 18, "color": "#111111"}
+            },
+            "showgrid": True,
+            "gridwidth": 1,
+            "gridcolor": "#e0e0e0",
+            "zeroline": False,
+            "showline": True,
+            "linecolor": "#2f3b52",
+            "linewidth": 1.4,
+            "tickfont": {"family": "Times New Roman, Georgia, serif", "size": 14, "color": "#111111"},
+        },
+        annotations=annotations,
+        shapes=(
+            (
+                [
+                    {
+                        "type": "rect",
+                        "xref": "paper",
+                        "yref": "paper",
+                        "x0": 0.0,
+                        "x1": 1.0,
+                        "y0": 1.02,
+                        "y1": 1.14,
+                        "fillcolor": title_band_color,
+                        "line": {"width": 0},
+                    },
+                    {
+                        "type": "rect",
+                        "xref": "paper",
+                        "yref": "paper",
+                        "x0": 0.76,
+                        "x1": 1.0,
+                        "y0": 0.0,
+                        "y1": 1.0,
+                        "fillcolor": "rgba(245,247,250,0.95)",
+                        "layer": "below",
+                        "line": {"color": "#c7c7c7", "width": 1},
+                    },
+                ]
+                if title
+                else [
+                    {
+                        "type": "rect",
+                        "xref": "paper",
+                        "yref": "paper",
+                        "x0": 0.76,
+                        "x1": 1.0,
+                        "y0": 0.0,
+                        "y1": 1.0,
+                        "fillcolor": "rgba(245,247,250,0.95)",
+                        "layer": "below",
+                        "line": {"color": "#c7c7c7", "width": 1},
+                    }
+                ]
+            )
+        ),
+        margin={"l": 90, "r": 40, "t": 160, "b": 80},
+    )
+    
+    if show_fines_band and fines_low is not None and fines_high is not None:
+        fig.add_annotation(
+            x=0.88,
+            y=0.24,
+            xref="paper",
+            yref="paper",
+            text="<b>Finos</b>",
+            showarrow=False,
+            align="center",
+            bgcolor="rgba(255,255,255,0.96)",
+            bordercolor="#4a4a4a",
+            borderwidth=1.2,
+            borderpad=6,
+            font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
+        )
+        fig.add_shape(
+            type="line",
+            xref="paper",
+            yref="paper",
+            x0=0.84,
+            x1=0.92,
+            y0=0.19,
+            y1=0.19,
+            line={"color": "#5b9bd5", "width": 2, "dash": "dot"},
+        )
+        fig.add_annotation(
+            x=0.925,
+            y=0.19,
+            xref="paper",
+            yref="paper",
+            text=low_label,
+            showarrow=False,
+            align="left",
+            font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
+        )
+        fig.add_shape(
+            type="line",
+            xref="paper",
+            yref="paper",
+            x0=0.84,
+            x1=0.92,
+            y0=0.14,
+            y1=0.14,
+            line={"color": "#2b6ea6", "width": 2, "dash": "dash"},
+        )
+        fig.add_annotation(
+            x=0.925,
+            y=0.14,
+            xref="paper",
+            yref="paper",
+            text=high_label,
+            showarrow=False,
+            align="left",
+            font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
+        )
+
+    return fig.to_html(div_id="comparison-plot", include_plotlyjs="cdn")
+
+
+def plot_fines_phi_relationship(
+    fines,
+    phi,
+    fines_label="Porcentaje de finos (%)",
+    phi_label="Ángulo de fricción, φ (grados)",
+    title="Relación entre finos y φ",
+):
+    fines = np.asarray(fines, dtype=float)
+    phi = np.asarray(phi, dtype=float)
+
+    valid_mask = np.isfinite(fines) & np.isfinite(phi)
+    fines = fines[valid_mask]
+    phi = phi[valid_mask]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=fines,
+            y=phi,
+            mode="markers",
+            name="Puntos de datos",
+            marker={
+                "color": "#1f4e79",
+                "size": 9,
+                "line": {"color": "#ffffff", "width": 1.2},
+                "opacity": 0.95,
+            },
+            hovertemplate=f"{fines_label}: %{{x:.2f}}<br>{phi_label}: %{{y:.2f}}<extra></extra>",
+        )
+    )
+
+    equation_text = None
+    r2_value = None
+    rmse_value = None
+    if len(fines) >= 2:
+        slope, intercept = np.polyfit(fines, phi, 1)
+        line_x = np.linspace(np.min(fines), np.max(fines), 200)
+        line_y = slope * line_x + intercept
+        y_pred = slope * fines + intercept
+        r2_value = r2_score(phi, y_pred)
+        rmse_value = rmse(phi, y_pred)
+        equation_text = f"φ = {slope:.4f}·FC + {intercept:.4f}"
+        fig.add_trace(
+            go.Scatter(
+                x=line_x,
+                y=line_y,
+                mode="lines",
+                name="Ajuste lineal",
+                line={"color": "#8b1e3f", "width": 3.2},
+                hoverinfo="skip",
+            )
+        )
+
+    title_band_color = "#1f4e79"
+    title_text_color = "#ffffff"
+    annotations = []
+    if title:
+        annotations.append(
+            {
+                "x": 0.5,
+                "y": 1.08,
+                "xref": "paper",
+                "yref": "paper",
+                "text": title,
+                "showarrow": False,
+                "align": "center",
+                "yanchor": "middle",
+                "font": {
+                    "family": "Times New Roman, Georgia, serif",
+                    "size": 22,
+                    "color": title_text_color,
+                },
+            }
+        )
+
+    stats_lines = []
+    if equation_text:
+        stats_lines.append(f"<b><span style='color:#1f4e79'>{equation_text}</span></b>")
+    if r2_value is not None:
+        stats_lines.append(f"R² = {r2_value:.4f}")
+    if rmse_value is not None:
+        stats_lines.append(f"RMSE = {rmse_value:.4f}")
+    if stats_lines:
+        annotations.append(
+            {
+                "x": 0.96,
+                "y": 0.93,
+                "xref": "paper",
+                "yref": "paper",
+                "text": "<br>".join(stats_lines),
+                "showarrow": False,
+                "align": "center",
+                "bgcolor": "rgba(255,255,255,0.9)",
+                "bordercolor": "#2f3b52",
+                "borderwidth": 1.2,
+                "borderpad": 8,
+                "font": {
+                    "size": 13,
+                    "color": "#1b1b1b",
+                    "family": "Times New Roman, Georgia, serif",
+                },
+            }
+        )
+
+    fig.update_layout(
+        title={"text": ""},
+        xaxis={
+            "title": {
+                "text": fines_label,
+                "font": {
+                    "family": "Times New Roman, Georgia, serif",
+                    "size": 18,
+                    "color": "#111111",
+                },
+            },
+            "domain": [0.0, 0.72],
+            "showgrid": True,
+            "gridwidth": 1,
+            "gridcolor": "#e7e7e7",
+            "tickfont": {"family": "Times New Roman, Georgia, serif", "size": 13},
+            "zeroline": False,
+            "showline": True,
+            "linecolor": "#2f3b52",
+            "linewidth": 1.6,
+            "mirror": True,
+        },
+        yaxis={
+            "title": {
+                "text": phi_label,
+                "font": {
+                    "family": "Times New Roman, Georgia, serif",
+                    "size": 18,
+                    "color": "#111111",
+                },
+            },
+            "showgrid": True,
+            "gridwidth": 1,
+            "gridcolor": "#e7e7e7",
+            "tickfont": {"family": "Times New Roman, Georgia, serif", "size": 13},
+            "zeroline": False,
+            "showline": True,
+            "linecolor": "#2f3b52",
+            "linewidth": 1.6,
+            "mirror": True,
+        },
+        template="plotly_white",
+        font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
+        showlegend=True,
+        legend={
+            "orientation": "h",
+            "x": 0.99,
+            "xanchor": "right",
+            "y": 0.06,
+            "yanchor": "bottom",
+            "bgcolor": "rgba(255, 255, 255, 0.9)",
+            "bordercolor": "#c7c7c7",
+            "borderwidth": 1,
+            "font": {"family": "Times New Roman, Georgia, serif", "size": 15},
+        },
+        annotations=annotations,
+        shapes=[
+            {
+                "type": "rect",
+                "xref": "paper",
+                "yref": "paper",
+                "x0": 0.0,
+                "x1": 1.0,
+                "y0": 1.02,
+                "y1": 1.14,
+                "fillcolor": title_band_color,
+                "line": {"width": 0},
+            },
+            {
+                "type": "rect",
+                "xref": "paper",
+                "yref": "paper",
+                "x0": 0.76,
+                "x1": 1.0,
+                "y0": 0.0,
+                "y1": 1.0,
+                "fillcolor": "rgba(245,247,250,0.95)",
+                "layer": "below",
+                "line": {"color": "#c7c7c7", "width": 1},
+            },
+        ],
+        margin={"l": 90, "r": 40, "t": 160, "b": 80},
+        height=640,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+    )
+
+    return fig.to_html(div_id="fines-phi-plot", include_plotlyjs="cdn")
+
+
+def save_fig(fig, path: Path) -> None:
+    html = to_html(
+        fig,
+        include_plotlyjs="cdn",
+        full_html=True,
+        config={
+            "displaylogo": False,
+            "editable": False,
+            "scrollZoom": False,
+            "responsive": True,
+        },
+    )
+    path.write_text(html, encoding="utf-8")

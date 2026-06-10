@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dashboard Geotecnico</title>
+    <style>
+        :root {
+            --bg: #f4f3ef;
+            --card: #ffffff;
+            --accent: #1f77b4;
+            --text: #1a1a1a;
+            --muted: #5c5c5c;
+        }
+        body {
+            margin: 0;
+            font-family: "Georgia", "Times New Roman", serif;
+            background: radial-gradient(circle at top left, #eef5ff, #f4f3ef 55%);
+            color: var(--text);
+        }
+        header {
+            padding: 32px 20px 10px;
+            text-align: center;
+        }
+        header h1 {
+            margin: 0 0 6px;
+            font-size: 2.2rem;
+            letter-spacing: 1px;
+        }
+        header p {
+            margin: 0;
+            color: var(--muted);
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto 60px;
+            padding: 0 20px;
+        }
+        .card {
+            background: var(--card);
+            padding: 20px;
+            border-radius: 14px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            margin-top: 20px;
+        }
+        .result-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 14px;
+            margin-top: 10px;
+        }
+        .panel {
+            border: 1px solid #d9e2ea;
+            border-radius: 12px;
+            padding: 16px;
+            background: #fbfcfd;
+        }
+        .panel h3 {
+            margin: 0 0 10px;
+            font-size: 1rem;
+            color: #223;
+        }
+        .placeholder-box {
+            min-height: 420px;
+            border: 2px dashed #c5d0da;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(180deg, #fbfdff, #f2f6fa);
+            color: #6a7480;
+            font-size: 1.05rem;
+            text-align: center;
+            padding: 20px;
+        }
+        .empty-state {
+            max-width: 360px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+        .empty-state-icons {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+        .empty-state-icon {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #e9f1f8;
+            color: #24506f;
+            font-size: 2rem;
+            box-shadow: inset 0 0 0 1px #d6e2ec;
+        }
+        .empty-state-title {
+            margin: 0;
+            font-size: 1.35rem;
+            line-height: 1.2;
+            color: #203040;
+        }
+        .empty-state-text {
+            margin: 0;
+            color: #687582;
+            line-height: 1.5;
+        }
+        .empty-state-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 6px;
+            padding: 10px 16px;
+            border-radius: 999px;
+            border: 1px solid #2b6cb0;
+            background: #2b6cb0;
+            color: #fff;
+            font-size: 0.98rem;
+            text-decoration: none;
+            cursor: pointer;
+            box-shadow: 0 8px 18px rgba(43, 108, 176, 0.18);
+        }
+        .landing-shell {
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 48px 20px;
+        }
+        .landing-card {
+            width: min(860px, 100%);
+            padding: 42px;
+            border-radius: 24px;
+            background: linear-gradient(180deg, #ffffff, #f4f8fc);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.12);
+            border: 1px solid #d9e5ef;
+            text-align: center;
+        }
+        .landing-title {
+            margin: 0 0 12px;
+            font-size: 2.4rem;
+            color: #152538;
+        }
+        .landing-subtitle {
+            margin: 0 auto 28px;
+            max-width: 720px;
+            color: #5b6775;
+            font-size: 1.08rem;
+            line-height: 1.6;
+        }
+        .landing-actions {
+            display: flex;
+            gap: 14px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .landing-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 240px;
+            padding: 16px 22px;
+            border-radius: 16px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 1.02rem;
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+        }
+        .landing-link:hover {
+            transform: translateY(-2px);
+        }
+        .landing-link.primary {
+            background: #1f77b4;
+            color: #fff;
+            box-shadow: 0 14px 28px rgba(31, 119, 180, 0.22);
+        }
+        .landing-link.secondary {
+            background: #eef3f8;
+            color: #203040;
+            border: 1px solid #d3dce5;
+        }
+        form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+        }
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .preview-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+            width: 100%;
+        }
+        .column-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .column-field label {
+            font-size: 0.92rem;
+            color: #304050;
+            font-weight: bold;
+        }
+        .column-field select,
+        .column-field input[type="file"] {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid #c8d4df;
+            background: #fff;
+            color: #203040;
+        }
+        .helper-text {
+            margin: 8px 0 0;
+            color: #66737f;
+            font-size: 0.93rem;
+        }
+        .preview-table-wrap {
+            overflow-x: auto;
+        }
+        .model-summary {
+            margin-top: 12px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: #f4f8fc;
+            border: 1px solid #d9e5ef;
+            color: #223043;
+            line-height: 1.5;
+        }
+        .model-summary strong {
+            color: #18324b;
+        }
+        button {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 999px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .button-secondary {
+            background: #e7edf3;
+            color: #234;
+            border: 1px solid #c9d3dd;
+        }
+        .error {
+            color: #b42318;
+            font-weight: bold;
+            margin-top: 12px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+        }
+        th, td {
+            padding: 8px;
+            border-bottom: 1px solid #e0e0e0;
+            text-align: left;
+        }
+        img {
+            max-width: 100%;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    {% if landing_page %}
+    <div class="landing-shell">
+        <div class="landing-card">
+            <h1 class="landing-title">Dashboard Geotecnico</h1>
+            <p class="landing-subtitle">Elige una ruta: regresión para ajustar E y φ con N<sub>60</sub>, o comparación para contrastar tu correlación con otros autores en una sola gráfica.</p>
+            <div class="landing-actions">
+                <a class="landing-link primary" href="/regression/">Regresión lineal / cuadrática</a>
+                <a class="landing-link secondary" href="/comparison/">Comparación con otros autores</a>
+                <a class="landing-link secondary" href="/fines/">Gráfica de porcentaje de finos</a>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <header>
+        <h1>Dashboard Geotecnico</h1>
+        <p>Estimacion de E y phi desde N<sub>60</sub> con modelos de regresion.</p>
+    </header>
+
+    <div class="container">
+        <div class="card">
+            <div class="form-actions" style="margin-bottom: 12px;">
+                <a class="empty-state-button" href="/regression/">Regresión</a>
+                <a class="empty-state-button" href="/comparison/">Comparación con otros autores</a>
+                <a class="empty-state-button" href="/fines/">Gráfica de porcentaje de finos</a>
+                <a class="empty-state-button button-secondary" href="/">Inicio</a>
+            </div>
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; align-items: end;">
+                    <div>
+                        <label for="id_data_file"><strong>Archivo CSV o Excel</strong></label>
+                        {{ form.data_file }}
+                    </div>
+                    <div class="column-field" style="min-width: 220px;">
+                        <label for="id_model_type"><strong>Tipo de regresión</strong></label>
+                        {{ form.model_type }}
+                    </div>
+                </div>
+                <div class="form-actions" style="margin-top: 15px;">
+                    <button type="submit" name="action" value="preview">Previsualizar archivo</button>
+                    <button type="submit" name="action" value="clear" class="button-secondary" formnovalidate>Limpiar</button>
+                </div>
+                {% if has_preview %}
+                    <div class="preview-controls">
+                        {% if sheet_options %}
+                        <div class="column-field">
+                            <label for="selected_sheet">Hoja de Excel</label>
+                            <select id="selected_sheet" name="selected_sheet">
+                                {% for sheet_name in sheet_options %}
+                                    <option value="{{ sheet_name }}" {% if sheet_name == selected_sheet %}selected{% endif %}>{{ sheet_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+                        <div class="column-field">
+                            <label for="selected_n60">Columna N<sub>60</sub></label>
+                            <select id="selected_n60" name="selected_n60">
+                                <option value="">Selecciona una columna</option>
+                                {% for column in preview_headers %}
+                                    <option value="{{ column }}" {% if column == selected_n60 %}selected{% endif %}>{{ column }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="column-field">
+                            <label for="selected_phi">Columna φ</label>
+                            <select id="selected_phi" name="selected_phi">
+                                <option value="">Selecciona una columna</option>
+                                {% for column in preview_headers %}
+                                    <option value="{{ column }}" {% if column == selected_phi %}selected{% endif %}>{{ column }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="column-field">
+                            <label for="selected_fines">Columna finos (%)</label>
+                            <select id="selected_fines" name="selected_fines">
+                                <option value="">Selecciona una columna</option>
+                                {% for column in preview_headers %}
+                                    <option value="{{ column }}" {% if column == selected_fines %}selected{% endif %}>{{ column }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="column-field">
+                            <label for="fixed_c_value">Constante fija (opcional)</label>
+                            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                                <label style="display: inline-flex; gap: 6px; align-items: center; font-weight: normal;">
+                                    <input type="checkbox" name="use_fixed_c" {% if use_fixed_c %}checked{% endif %} />
+                                    Usar constante fija
+                                </label>
+                                <input
+                                    id="fixed_c_value"
+                                    name="fixed_c_value"
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="c"
+                                    value="{{ fixed_c_value }}"
+                                    style="max-width: 140px;"
+                                />
+                            </div>
+                        </div>
+                        <div class="column-field">
+                            <label for="selected_point_code">Código de punto (opcional)</label>
+                            <select id="selected_point_code" name="selected_point_code">
+                                <option value="">No usar</option>
+                                {% for column in preview_headers %}
+                                    <option value="{{ column }}" {% if column == selected_point_code %}selected{% endif %}>{{ column }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="column-field" style="margin-top: 10px;">
+                        <label>Excluir columnas (opcional)</label>
+                        <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                            {% for column in preview_headers %}
+                                <label style="display: inline-flex; gap: 6px; align-items: center; font-weight: normal;">
+                                    <input
+                                        type="checkbox"
+                                        name="exclude_columns"
+                                        value="{{ column }}"
+                                        {% if excluded_columns and column in excluded_columns %}checked{% endif %}
+                                    />
+                                    {{ column }}
+                                </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <p class="helper-text">Selecciona la columna N<sub>60</sub> y la columna φ para entrenar el modelo. Si usas "Raíz cuadrada + finos", selecciona también la columna de finos (%). Opcionalmente, selecciona la columna con los códigos de punto (ej: CH-1, CH-2) para mostrarlos en las gráficas.</p>
+                    <div class="form-actions" style="margin-top: 10px;">
+                        <button type="submit" name="action" value="train">Entrenar con esta selección</button>
+                    </div>
+                {% endif %}
+            </form>
+            {% if error %}
+                <div class="error">{{ error }}</div>
+            {% endif %}
+            {% if message %}
+                <div class="helper-text">{{ message }}</div>
+            {% endif %}
+        </div>
+
+        {% if has_preview %}
+            <div class="card">
+                <h2>Vista previa del archivo</h2>
+                <p class="helper-text">Estas son las primeras filas detectadas. Usa los desplegables para mapear las columnas antes de entrenar.</p>
+                <div class="preview-table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                {% for header in preview_headers %}
+                                    <th>{{ header }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in preview_rows %}
+                                <tr>
+                                    {% for value in row %}
+                                        <td>{{ value }}</td>
+                                    {% endfor %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="card">
+            <h2>Modelo lineal</h2>
+            <p>E = a * N<sub>60</sub> + b</p>
+            <p>&phi; = c * N<sub>60</sub> + d</p>
+            <p>donde a, b, c y d son coeficientes ajustados por regresion lineal.</p>
+        </div>
+
+        {% for section in sections %}
+            <div class="card">
+                <h2>{{ section.heading }}</h2>
+                <div class="result-grid">
+                    <div class="panel">
+                        <h3>{{ section.graph_title }}</h3>
+                        {% if section.plot_html %}
+                            {{ section.plot_html|safe }}
+                            <div class="model-summary">
+                                <strong>Modelo:</strong> {{ section.model_name|default:"-" }}<br />
+                                <strong>R²:</strong> {{ section.r2|default:"-" }}<br />
+                                <strong>RMSE:</strong> {{ section.rmse|default:"-" }}
+                                <br /><strong>Dispersión:</strong> {{ section.mape|default:"-" }}%
+                            </div>
+                        {% else %}
+                            <div class="placeholder-box">
+                                <div class="empty-state">
+                                    <div class="empty-state-icons">
+                                        <div class="empty-state-icon">∑</div>
+                                        <div class="empty-state-icon">📈</div>
+                                    </div>
+                                    <p class="empty-state-title">{{ section.graph_placeholder_title }}</p>
+                                    <p class="empty-state-text">{{ section.graph_placeholder_text }}</p>
+                                    <button
+                                        type="button"
+                                        class="empty-state-button"
+                                        onclick="document.getElementById('id_data_file').click();"
+                                    >
+                                        {{ section.graph_button_label }}
+                                    </button>
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</body>
+</html>
