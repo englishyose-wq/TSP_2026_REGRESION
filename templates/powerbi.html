@@ -3,130 +3,31 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Power BI Plotly</title>
+    <title>Gráfica</title>
     <style>
-        :root {
-            --bg: #eef4fa;
-            --card: #ffffff;
-            --ink: #152238;
-            --muted: #5a6675;
-            --accent: #1f77b4;
-        }
-        body {
+        html, body {
             margin: 0;
-            font-family: Georgia, "Times New Roman", serif;
-            background: radial-gradient(circle at top left, #f7fbff, var(--bg) 55%);
-            color: var(--ink);
-        }
-        .shell {
-            padding: 20px;
-        }
-        .card {
-            background: var(--card);
-            border: 1px solid #d9e5ef;
-            border-radius: 18px;
-            box-shadow: 0 18px 42px rgba(19, 37, 58, 0.08);
+            padding: 0;
+            width: 100%;
+            height: 100%;
             overflow: hidden;
+            background: #ffffff;
         }
-        .header {
-            padding: 18px 22px 10px;
-            border-bottom: 1px solid #e4edf5;
+        .plot-only {
+            width: 100vw;
+            height: 100vh;
         }
-        .header h1 {
-            margin: 0 0 6px;
-            font-size: 1.35rem;
-        }
-        .header p {
-            margin: 0;
-            color: var(--muted);
-            font-size: 0.95rem;
-        }
-        .content {
-            padding: 14px 18px 18px;
-        }
-        .empty {
-            min-height: 420px;
-            display: grid;
-            place-items: center;
-            border: 2px dashed #c8d6e4;
-            border-radius: 14px;
-            color: var(--muted);
-            background: linear-gradient(180deg, #fbfdff, #f3f7fb);
-            text-align: center;
-            padding: 24px;
-        }
-        .empty strong {
-            display: block;
-            color: var(--ink);
-            font-size: 1.05rem;
-            margin-bottom: 8px;
-        }
-        .note {
-            margin-top: 10px;
-            color: var(--muted);
-            font-size: 0.92rem;
-        }
-        .toolbar {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-bottom: 14px;
-        }
-        .toolbar a {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 10px 14px;
-            border-radius: 999px;
-            text-decoration: none;
-            background: var(--accent);
-            color: white;
-            font-weight: bold;
-            font-size: 0.95rem;
-        }
-        .plot-wrap {
-            min-height: 640px;
-        }
-        .plot-wrap > div {
+        .plot-only > div {
             width: 100% !important;
+            height: 100% !important;
         }
     </style>
 </head>
 <body>
-    <div class="shell">
-        <div class="card">
-            <div class="header">
-                <h1>Vista pública para Power BI</h1>
-                <p>Esta página muestra la última gráfica generada desde tu app Django.</p>
-            </div>
-            <div class="content">
-                <div class="toolbar">
-                    <a href="/regression/">Ir a regresión</a>
-                    <a href="/fines/">Ir a finos</a>
-                    <a href="/comparison/">Ir a comparación</a>
-                    {% if has_excel %}
-                        <a href="/powerbi/excel/">Ver último Excel</a>
-                        <a href="/powerbi/data.csv">CSV para Power BI</a>
-                    {% endif %}
-                </div>
-                {% if has_excel %}
-                    <p class="note">Excel guardado: <strong>{{ excel_filename }}</strong>{% if excel_sheet %} (hoja {{ excel_sheet }}){% endif %}</p>
-                {% endif %}
-                {% if has_plot %}
-                    <div class="plot-wrap">
-                        {{ plot_html|safe }}
-                    </div>
-                {% else %}
-                    <div class="empty">
-                        <div>
-                            <strong>Aún no hay una gráfica guardada</strong>
-                            <div>Primero genera una gráfica en la vista de regresión, comparación o finos. Después vuelve aquí y Power BI verá el resultado.</div>
-                            <div class="note">URL actual: /powerbi/</div>
-                        </div>
-                    </div>
-                {% endif %}
-            </div>
+    {% if has_plot %}
+        <div class="plot-only">
+            {{ plot_html|safe }}
         </div>
-    </div>
+    {% endif %}
 </body>
 </html>

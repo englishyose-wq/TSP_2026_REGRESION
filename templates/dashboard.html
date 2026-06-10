@@ -419,6 +419,12 @@
             {% if message %}
                 <div class="helper-text">{{ message }}</div>
             {% endif %}
+            {% if loaded_from_shared_snapshot %}
+                <div class="helper-text">
+                    Última gráfica y Excel cargados desde el servidor (visibles en todos los dispositivos).
+                    {% if shared_snapshot_at %}Actualizado: {{ shared_snapshot_at|date:"d/m/Y H:i" }}.{% endif %}
+                </div>
+            {% endif %}
         </div>
 
         {% if has_preview %}

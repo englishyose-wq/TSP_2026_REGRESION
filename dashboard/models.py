@@ -8,6 +8,8 @@ class LatestSnapshot(models.Model):
     uploaded_file_name = models.CharField(max_length=255, blank=True, default="")
     uploaded_sheet = models.CharField(max_length=255, blank=True, default="")
     plot_html = models.TextField(blank=True, default="")
+    plot_html_embed = models.TextField(blank=True, default="")
+    plot_metadata = models.JSONField(blank=True, default=dict)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

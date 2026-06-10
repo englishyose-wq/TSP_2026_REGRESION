@@ -52,9 +52,21 @@
             font-size: 0.95rem;
         }
         .meta {
-            margin-bottom: 12px;
+            margin-bottom: 16px;
             color: var(--muted);
             font-size: 0.95rem;
+        }
+        .sheet-block {
+            margin-bottom: 28px;
+        }
+        .sheet-block h2 {
+            margin: 0 0 8px;
+            font-size: 1.1rem;
+        }
+        .sheet-meta {
+            margin-bottom: 10px;
+            color: var(--muted);
+            font-size: 0.9rem;
         }
         .table-wrap {
             overflow: auto;
@@ -102,26 +114,34 @@
         <div class="card">
             <div class="header">
                 <h1>Último Excel para Power BI</h1>
-                <p>Vista en tabla del archivo más reciente guardado en la base de datos.</p>
+                <p>Todas las hojas del archivo más reciente guardado en la base de datos.</p>
             </div>
             <div class="content">
                 <div class="toolbar">
                     <a href="/powerbi/">Ver gráfica</a>
-                    <a href="/powerbi/data.csv">Descargar CSV</a>
+                    <a href="/powerbi/data.xlsx">Descargar Excel completo</a>
+                    <a href="/powerbi/data.csv">CSV todas las hojas</a>
                     <a href="/regression/">Subir nuevo Excel</a>
                 </div>
                 {% if has_excel %}
                     <div class="meta">
                         Archivo: <strong>{{ excel_filename }}</strong>
-                        {% if excel_sheet %} | Hoja: <strong>{{ excel_sheet }}</strong>{% endif %}
-                        | Filas: <strong>{{ total_rows }}</strong>
-                        {% if truncated %}
-                            (mostrando las primeras {{ preview_limit }})
-                        {% endif %}
+                        | Hojas: <strong>{{ sheet_count }}</strong>
                     </div>
-                    <div class="table-wrap">
-                        {{ table_html|safe }}
-                    </div>
+                    {% for sheet in sheet_tables %}
+                        <div class="sheet-block">
+                            <h2>{{ sheet.name }}</h2>
+                            <div class="sheet-meta">
+                                Filas: <strong>{{ sheet.total_rows }}</strong>
+                                {% if sheet.truncated %}
+                                    (mostrando las primeras {{ preview_limit }})
+                                {% endif %}
+                            </div>
+                            <div class="table-wrap">
+                                {{ sheet.table_html|safe }}
+                            </div>
+                        </div>
+                    {% endfor %}
                 {% else %}
                     <div class="empty">
                         <div>

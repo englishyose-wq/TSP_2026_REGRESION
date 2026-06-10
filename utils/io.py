@@ -91,3 +91,28 @@ def load_dataframe_from_bytes(
     # Si el archivo trae columnas "Unnamed" pero la primera fila tiene texto, usa esa fila
     # como encabezado para mostrar nombres reales.
     return _maybe_use_first_row_as_header(df)
+
+
+def load_all_dataframes_from_bytes(file_bytes: bytes, filename: str) -> list[tuple[str, pd.DataFrame]]:
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".csv":
+        return [("datos", load_dataframe_from_bytes(file_bytes, filename))]
+    sheet_names = get_excel_sheet_names_from_bytes(file_bytes, filename)
+    return [
+        (sheet_name, load_dataframe_from_bytes(file_bytes, filename, sheet_name=sheet_name))
+        for sheet_name in sheet_names
+    ]
+
+
+def resolve_sheet_query(file_bytes: bytes, filename: str, sheet_query: str) -> str:
+    sheet_names = get_excel_sheet_names_from_bytes(file_bytes, filename)
+    if not sheet_names:
+        raise ValueError("El archivo no tiene hojas de Excel.")
+    if sheet_query.isdigit():
+        index = int(sheet_query)
+        if 0 <= index < len(sheet_names):
+            return sheet_names[index]
+        raise ValueError(f"Índice de hoja fuera de rango: {sheet_query}")
+    if sheet_query in sheet_names:
+        return sheet_query
+    raise ValueError(f"Hoja no encontrada: {sheet_query}")

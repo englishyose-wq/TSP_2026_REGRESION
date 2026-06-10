@@ -6,7 +6,12 @@ from django.http import HttpResponse
 from django.shortcuts import render
 
 from models.regression import analyze_target
-from utils.io import get_excel_sheet_names_from_bytes, load_dataframe_from_bytes
+from utils.io import (
+    get_excel_sheet_names_from_bytes,
+    load_all_dataframes_from_bytes,
+    load_dataframe_from_bytes,
+    resolve_sheet_query,
+)
 from utils.plotting import (
     plot_author_comparison,
     plot_fines_phi_relationship,
@@ -18,8 +23,11 @@ from .forms import FinesUploadForm, UploadForm
 from .persistence import (
     load_latest_upload_metadata,
     load_plot_html,
+    load_plot_html_embed,
+    load_plot_metadata,
+    load_snapshot_status,
     load_uploaded_file,
-    save_plot_html,
+    save_plot_snapshot,
     save_uploaded_file,
 )
 
@@ -179,8 +187,60 @@ def _apply_column_exclusions(df, excluded_columns):
     return df.drop(columns=columns_to_drop)
 
 
-def _save_latest_plot_html(plot_html):
-    save_plot_html(plot_html)
+def _save_latest_plot_html(plot_html, metadata=None, plot_html_embed=None):
+    save_plot_snapshot(plot_html, metadata, plot_html_embed=plot_html_embed)
+
+
+def _hydrate_context_from_snapshot(request, context):
+    """Carga el último Excel y gráfica guardados en el servidor (todos los dispositivos)."""
+    if not context.get("has_preview"):
+        try:
+            df, sheet_names, selected_sheet = _load_session_dataframe(request)
+            context.update(
+                _build_preview_context(
+                    df,
+                    sheet_names=sheet_names,
+                    selected_sheet=selected_sheet,
+                )
+            )
+            context["has_preview"] = True
+        except ValueError:
+            pass
+
+    plot_html = load_plot_html()
+    metadata = load_plot_metadata()
+    if not plot_html:
+        return context
+
+    view_mode = context.get("view_mode")
+    if metadata.get("view_mode") != view_mode:
+        return context
+
+    if view_mode == "regression":
+        has_plot = any(section.get("plot_html") for section in context.get("sections", []))
+        if has_plot:
+            return context
+        for section in context.get("sections", []):
+            if section.get("target") != "phi":
+                continue
+            section["plot_html"] = plot_html
+            for key in ("equation", "r2", "rmse", "mape", "model_name"):
+                if key in metadata:
+                    section[key] = metadata[key]
+    elif view_mode == "comparison" and not context.get("comparison_plot_html"):
+        context["comparison_plot_html"] = plot_html
+        for key in ("your_column", "r2_by_series", "r2_your"):
+            if key in metadata:
+                context[key] = metadata[key]
+    elif view_mode == "fines" and not context.get("fines_plot_html"):
+        context["fines_plot_html"] = plot_html
+        for key in ("selected_fines", "selected_phi"):
+            if key in metadata:
+                context[key] = metadata[key]
+
+    context["loaded_from_shared_snapshot"] = True
+    context["shared_snapshot_at"] = load_snapshot_status().get("updated_at")
+    return context
 
 
 def _load_latest_plot_html():
@@ -268,41 +328,58 @@ def _train_one_target(
 
     point_labels = subset["point_code"].values if "point_code" in subset.columns else None
     
+    plot_kwargs = {
+        "xlabel": "Número de golpes corregido, N<sub>60</sub>",
+        "title": title,
+        "equation_text": best.equation,
+        "r2_value": best.r2,
+        "rmse_value": best.rmse,
+        "mape_value": best.mape,
+        "point_labels": point_labels,
+    }
     if model_type == "sqrt_fines":
         plot_html = plot_model_comparison_3d(
             subset["N60"].values,
             subset["fines"].values,
             subset[target_name].values,
             best,
-            xlabel="Número de golpes corregido, N<sub>60</sub>",
             ylabel="Finos (FC, %)",
             zlabel=ylabel,
-            title=title,
-            equation_text=best.equation,
-            r2_value=best.r2,
-            rmse_value=best.rmse,
-            mape_value=best.mape,
-            point_labels=point_labels,
+            **plot_kwargs,
+        )
+        plot_html_embed = plot_model_comparison_3d(
+            subset["N60"].values,
+            subset["fines"].values,
+            subset[target_name].values,
+            best,
+            ylabel="Finos (FC, %)",
+            zlabel=ylabel,
+            **plot_kwargs,
+            embed_mode=True,
         )
     else:
         plot_html = plot_model_comparison(
             subset["N60"].values,
             subset[target_name].values,
             analysis["results"],
-            xlabel="Número de golpes corregido, N<sub>60</sub>",
             ylabel=ylabel,
-            title=title,
-            equation_text=best.equation,
-            r2_value=best.r2,
-            rmse_value=best.rmse,
-            mape_value=best.mape,
-            point_labels=point_labels,
             fines=subset["fines"].values if model_type == "sqrt_fines" else None,
+            **plot_kwargs,
+        )
+        plot_html_embed = plot_model_comparison(
+            subset["N60"].values,
+            subset[target_name].values,
+            analysis["results"],
+            ylabel=ylabel,
+            fines=subset["fines"].values if model_type == "sqrt_fines" else None,
+            **plot_kwargs,
+            embed_mode=True,
         )
 
     return {
         "best": best,
         "plot_html": plot_html,
+        "plot_html_embed": plot_html_embed,
         "equation": best.equation,
         "r2": best.r2,
         "rmse": best.rmse,
@@ -427,7 +504,18 @@ def _dashboard(request, view_mode):
                         "model_name": result["model_name"],
                     }
                 )
-                _save_latest_plot_html(result["plot_html"])
+                _save_latest_plot_html(
+                    result["plot_html"],
+                    {
+                        "view_mode": "regression",
+                        "equation": result["equation"],
+                        "r2": result["r2"],
+                        "rmse": result["rmse"],
+                        "mape": result["mape"],
+                        "model_name": result["model_name"],
+                    },
+                    plot_html_embed=result["plot_html_embed"],
+                )
 
             context["sections"] = list(sections.values())
 
@@ -440,6 +528,7 @@ def _dashboard(request, view_mode):
         except Exception as exc:
             context["error"] = f"Error al procesar el archivo: {exc}"
 
+    _hydrate_context_from_snapshot(request, context)
     return render(request, "dashboard.html", context)
 
 
@@ -562,7 +651,18 @@ def regression_view(request):
                         "model_name": result["model_name"],
                     }
                 )
-                _save_latest_plot_html(result["plot_html"])
+                _save_latest_plot_html(
+                    result["plot_html"],
+                    {
+                        "view_mode": "regression",
+                        "equation": result["equation"],
+                        "r2": result["r2"],
+                        "rmse": result["rmse"],
+                        "mape": result["mape"],
+                        "model_name": result["model_name"],
+                    },
+                    plot_html_embed=result["plot_html_embed"],
+                )
 
             context["sections"] = list(sections.values())
 
@@ -575,6 +675,7 @@ def regression_view(request):
         except Exception as exc:
             context["error"] = f"Error al procesar el archivo: {exc}"
 
+    _hydrate_context_from_snapshot(request, context)
     return render(request, "dashboard.html", context)
 
 
@@ -754,36 +855,48 @@ def comparison_view(request):
             title = "Comparacion de correlaciones para phi"
 
             # Generate comparison plot
-            plot_html = plot_author_comparison(
-                x,
-                your_y,
-                your_column,
-                series_data,
-                field_x,
-                field_y,
-                n60_col,
-                ylabel,
-                title,
-                target_type,
-                r2_by_series=r2_by_series,
-                r2_your=r2_your,
-                fines_low=df_numeric[fines_low_col].values if show_fines_band else None,
-                fines_high=df_numeric[fines_high_col].values if show_fines_band else None,
-                fines_low_label=fines_low_col or None,
-                fines_high_label=fines_high_col or None,
-                show_fines_band=show_fines_band,
-            )
+            comparison_kwargs = {
+                "x": x,
+                "your_y": your_y,
+                "your_column_name": your_column,
+                "comparison_series": series_data,
+                "field_points_x": field_x,
+                "field_points_y": field_y,
+                "x_label": n60_col,
+                "ylabel": ylabel,
+                "title": title,
+                "target_type": target_type,
+                "r2_by_series": r2_by_series,
+                "r2_your": r2_your,
+                "fines_low": df_numeric[fines_low_col].values if show_fines_band else None,
+                "fines_high": df_numeric[fines_high_col].values if show_fines_band else None,
+                "fines_low_label": fines_low_col or None,
+                "fines_high_label": fines_high_col or None,
+                "show_fines_band": show_fines_band,
+            }
+            plot_html = plot_author_comparison(**comparison_kwargs)
+            plot_html_embed = plot_author_comparison(**comparison_kwargs, embed_mode=True)
 
             context["comparison_plot_html"] = plot_html
             context["message"] = "Grafica de comparacion generada correctamente."
             context["your_column"] = your_column
             context["r2_by_series"] = r2_by_series
             context["r2_your"] = r2_your
-            _save_latest_plot_html(plot_html)
+            _save_latest_plot_html(
+                plot_html,
+                {
+                    "view_mode": "comparison",
+                    "your_column": your_column,
+                    "r2_by_series": r2_by_series,
+                    "r2_your": r2_your,
+                },
+                plot_html_embed=plot_html_embed,
+            )
 
         except Exception as exc:
             context["error"] = f"Error al procesar: {exc}"
 
+    _hydrate_context_from_snapshot(request, context)
     return render(request, "comparison.html", context)
 
 
@@ -876,83 +989,159 @@ def fines_view(request):
             fines_values = df_numeric[selected_fines].values
             phi_values = df_numeric[selected_phi].values
 
-            plot_html = plot_fines_phi_relationship(
-                fines_values,
-                phi_values,
-                fines_label="Porcentaje de finos (%)",
-                phi_label="Ángulo de fricción, φ (grados)",
-                title="Relación entre porcentaje de finos y φ",
+            fines_plot_kwargs = {
+                "fines_label": "Porcentaje de finos (%)",
+                "phi_label": "Ángulo de fricción, φ (grados)",
+                "title": "Relación entre porcentaje de finos y φ",
+            }
+            plot_html = plot_fines_phi_relationship(fines_values, phi_values, **fines_plot_kwargs)
+            plot_html_embed = plot_fines_phi_relationship(
+                fines_values, phi_values, **fines_plot_kwargs, embed_mode=True
             )
 
             context["fines_plot_html"] = plot_html
             context["message"] = "Gráfica de finos generada correctamente."
             context["selected_fines"] = selected_fines
             context["selected_phi"] = selected_phi
-            _save_latest_plot_html(plot_html)
+            _save_latest_plot_html(
+                plot_html,
+                {
+                    "view_mode": "fines",
+                    "selected_fines": selected_fines,
+                    "selected_phi": selected_phi,
+                },
+                plot_html_embed=plot_html_embed,
+            )
         except Exception as exc:
             context["error"] = f"Error al procesar: {exc}"
 
+    _hydrate_context_from_snapshot(request, context)
     return render(request, "fines.html", context)
 
 
-def _load_latest_dataframe():
+def _load_latest_file():
     file_bytes, filename, sheet_name = load_uploaded_file()
     if not file_bytes or not filename:
         return None, None, None
-    df = load_dataframe_from_bytes(file_bytes, filename, sheet_name=sheet_name)
-    return df, filename, sheet_name
+    return file_bytes, filename, sheet_name
+
+
+def _load_latest_dataframe(sheet_name=None):
+    file_bytes, filename, active_sheet = _load_latest_file()
+    if not file_bytes or not filename:
+        return None, None, None
+    resolved_sheet = sheet_name or active_sheet
+    df = load_dataframe_from_bytes(file_bytes, filename, sheet_name=resolved_sheet)
+    return df, filename, resolved_sheet
+
+
+def _load_latest_all_sheets():
+    file_bytes, filename, _active_sheet = _load_latest_file()
+    if not file_bytes or not filename:
+        return [], filename
+    return load_all_dataframes_from_bytes(file_bytes, filename), filename
 
 
 def powerbi_view(request):
-    """Vista pública mínima para Power BI con la última gráfica generada."""
-    plot_html = _load_latest_plot_html()
-    filename, sheet_name, _ = load_latest_upload_metadata()
+    """Vista pública mínima para Power BI: solo la gráfica limpia."""
+    plot_html = load_plot_html_embed()
     return render(
         request,
         "powerbi.html",
         {
             "plot_html": plot_html,
             "has_plot": bool(plot_html),
-            "has_excel": bool(filename),
-            "excel_filename": filename,
-            "excel_sheet": sheet_name,
         },
     )
 
 
 def powerbi_excel_view(request):
     """Tabla HTML del último Excel para embeber en Power BI."""
-    df, filename, sheet_name = _load_latest_dataframe()
+    sheets, filename = _load_latest_all_sheets()
     preview_limit = 200
-    table_html = None
-    total_rows = 0
-    if df is not None:
+    sheet_tables = []
+    for sheet_name, df in sheets:
         total_rows = len(df)
-        table_html = df.head(preview_limit).to_html(classes="data-table", index=False, border=0)
+        sheet_tables.append(
+            {
+                "name": sheet_name,
+                "total_rows": total_rows,
+                "truncated": total_rows > preview_limit,
+                "table_html": df.head(preview_limit).to_html(classes="data-table", index=False, border=0),
+            }
+        )
     return render(
         request,
         "powerbi_excel.html",
         {
-            "table_html": table_html,
-            "has_excel": df is not None,
+            "sheet_tables": sheet_tables,
+            "has_excel": bool(sheets),
             "excel_filename": filename,
-            "excel_sheet": sheet_name,
-            "total_rows": total_rows,
             "preview_limit": preview_limit,
-            "truncated": total_rows > preview_limit,
+            "sheet_count": len(sheet_tables),
         },
     )
 
 
-def powerbi_data_csv_view(request):
-    """CSV del último Excel para importar en Power BI con 'Obtener datos desde Web'."""
-    df, filename, _sheet_name = _load_latest_dataframe()
-    if df is None:
+def powerbi_data_xlsx_view(request):
+    """Excel completo con todas las hojas para Power BI."""
+    file_bytes, filename, _active_sheet = _load_latest_file()
+    if not file_bytes or not filename:
         return HttpResponse(
             "No hay un Excel guardado todavía.\n",
             content_type="text/plain; charset=utf-8",
             status=404,
         )
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {".xlsx", ".xls"}:
+        return HttpResponse(
+            "El último archivo guardado no es Excel. Usa /powerbi/data.csv para CSV.\n",
+            content_type="text/plain; charset=utf-8",
+            status=400,
+        )
+    content_type = (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        if suffix == ".xlsx"
+        else "application/vnd.ms-excel"
+    )
+    response = HttpResponse(file_bytes, content_type=content_type)
+    response["Content-Disposition"] = f'inline; filename="{Path(filename).name}"'
+    return response
+
+
+def powerbi_data_csv_view(request):
+    """CSV del último Excel para importar en Power BI con 'Obtener datos desde Web'."""
+    file_bytes, filename, _active_sheet = _load_latest_file()
+    if not file_bytes or not filename:
+        return HttpResponse(
+            "No hay un Excel guardado todavía.\n",
+            content_type="text/plain; charset=utf-8",
+            status=404,
+        )
+
+    sheet_query = request.GET.get("sheet", "").strip()
+    try:
+        if sheet_query:
+            resolved_sheet = resolve_sheet_query(file_bytes, filename, sheet_query)
+            df = load_dataframe_from_bytes(file_bytes, filename, sheet_name=resolved_sheet)
+        else:
+            sheets = load_all_dataframes_from_bytes(file_bytes, filename)
+            if len(sheets) == 1:
+                df = sheets[0][1]
+            else:
+                frames = []
+                for sheet_name, sheet_df in sheets:
+                    tagged = sheet_df.copy()
+                    tagged.insert(0, "_hoja_", sheet_name)
+                    frames.append(tagged)
+                df = pd.concat(frames, ignore_index=True, sort=False)
+    except ValueError as exc:
+        return HttpResponse(
+            f"{exc}\n",
+            content_type="text/plain; charset=utf-8",
+            status=400,
+        )
+
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'inline; filename="ultimo_excel.csv"'
     df.to_csv(path_or_buf=response, index=False)

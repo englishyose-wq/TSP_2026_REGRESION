@@ -9,6 +9,65 @@ from plotly.io import to_html
 from models.regression import predict
 from utils.metrics import r2_score, rmse
 
+_EMBED_HTML_CONFIG = {
+    "displaylogo": False,
+    "displayModeBar": False,
+    "editable": False,
+    "scrollZoom": True,
+    "responsive": True,
+}
+
+
+def _remove_pie_traces(fig):
+    fig.data = tuple(trace for trace in fig.data if getattr(trace, "type", None) != "pie")
+
+
+def _axis_full_width(axis_layout):
+    if not axis_layout:
+        return {"domain": [0.0, 1.0]}
+    axis = axis_layout.to_plotly_json()
+    axis["domain"] = [0.0, 1.0]
+    return axis
+
+
+def _scene_full_width(scene_layout):
+    if not scene_layout:
+        return {"domain": {"x": [0.0, 1.0], "y": [0.0, 1.0]}}
+    scene = scene_layout.to_plotly_json()
+    scene["domain"] = {"x": [0.0, 1.0], "y": [0.0, 1.0]}
+    return scene
+
+
+def _finalize_powerbi_html(fig, is_3d=False, div_id=None):
+    """Misma gráfica que en la web, sin título, ecuación, pastel ni panel lateral."""
+    _remove_pie_traces(fig)
+    layout_update = {
+        "title": None,
+        "annotations": [],
+        "shapes": [],
+        "showlegend": False,
+        "paper_bgcolor": "white",
+        "height": 640,
+    }
+    if is_3d:
+        layout_update["margin"] = {"l": 0, "r": 0, "t": 10, "b": 0}
+        layout_update["scene"] = _scene_full_width(fig.layout.scene)
+    else:
+        layout_update["margin"] = {"l": 90, "r": 40, "t": 40, "b": 80}
+        layout_update["plot_bgcolor"] = "white"
+        layout_update["xaxis"] = _axis_full_width(fig.layout.xaxis)
+        if fig.layout.yaxis:
+            layout_update["yaxis"] = fig.layout.yaxis.to_plotly_json()
+    fig.update_layout(**layout_update)
+    if div_id:
+        return fig.to_html(div_id=div_id, include_plotlyjs="cdn", config=_EMBED_HTML_CONFIG)
+    return to_html(
+        fig,
+        include_plotlyjs="cdn",
+        full_html=False,
+        config=_EMBED_HTML_CONFIG,
+    )
+
 
 def plot_model_comparison(
     x,
@@ -24,6 +83,7 @@ def plot_model_comparison(
     data_label: str = "Datos experimentales",
     point_labels: np.ndarray | None = None,
     fines: np.ndarray | None = None,
+    embed_mode: bool = False,
 ):
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
@@ -168,7 +228,7 @@ def plot_model_comparison(
     title_band_color = "#1f4e79"
     title_text_color = "#ffffff"
     annotations = []
-    if title:
+    if title and not embed_mode:
         annotations.append(
             {
                 "x": 0.5,
@@ -188,13 +248,13 @@ def plot_model_comparison(
         )
 
     stats_lines = []
-    if equation_text:
+    if equation_text and not embed_mode:
         stats_lines.append(equation_text)
-    if r2_value is not None:
+    if r2_value is not None and not embed_mode:
         stats_lines.append(f"R² = {r2_value:.4f}")
-    if rmse_value is not None:
+    if rmse_value is not None and not embed_mode:
         stats_lines.append(f"RMSE = {rmse_value:.4f}")
-    if mape_value is not None:
+    if mape_value is not None and not embed_mode:
         stats_lines.append(f"Dispersión = {mape_value:.2f}%")
     if stats_lines:
         annotations.append(
@@ -322,7 +382,7 @@ def plot_model_comparison(
         paper_bgcolor="white",
     )
 
-    if prefix_counts:
+    if prefix_counts and not embed_mode:
         values = [prefix_counts[p] for p in (prefix_order or prefix_counts.keys())]
         total_points = sum(values)
         text_positions = [
@@ -361,6 +421,8 @@ def plot_model_comparison(
             font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
         )
 
+    if embed_mode:
+        return _finalize_powerbi_html(fig, is_3d=False)
     return to_html(
         fig,
         include_plotlyjs="cdn",
@@ -388,6 +450,7 @@ def plot_model_comparison_3d(
     rmse_value: float | None = None,
     mape_value: float | None = None,
     point_labels: np.ndarray | None = None,
+    embed_mode: bool = False,
 ):
     x = np.asarray(x, dtype=float)
     fines = np.asarray(fines, dtype=float)
@@ -518,7 +581,7 @@ def plot_model_comparison_3d(
     title_band_color = "#1f4e79"
     title_text_color = "#ffffff"
     annotations = []
-    if title:
+    if title and not embed_mode:
         annotations.append(
             {
                 "x": 0.5,
@@ -541,16 +604,16 @@ def plot_model_comparison_3d(
         equation_text = result.equation
 
     stats_lines = []
-    if equation_text:
+    if equation_text and not embed_mode:
         split_equation = equation_text.replace(
             "*sqrt(N<sub>60</sub>) ", "*sqrt(N<sub>60</sub>)<br>", 1
         )
         stats_lines.append(f"<b><span style='color:#1f4e79'>{split_equation}</span></b>")
-    if r2_value is not None:
+    if r2_value is not None and not embed_mode:
         stats_lines.append(f"R² = {r2_value:.4f}")
-    if rmse_value is not None:
+    if rmse_value is not None and not embed_mode:
         stats_lines.append(f"RMSE = {rmse_value:.4f}")
-    if mape_value is not None:
+    if mape_value is not None and not embed_mode:
         stats_lines.append(f"Dispersión = {mape_value:.2f}%")
     if stats_lines:
         annotations.append(
@@ -669,7 +732,7 @@ def plot_model_comparison_3d(
         ),
     )
 
-    if prefix_counts:
+    if prefix_counts and not embed_mode:
         values = [prefix_counts[p] for p in (prefix_order or prefix_counts.keys())]
         total_points = sum(values)
         text_positions = [
@@ -708,6 +771,8 @@ def plot_model_comparison_3d(
             font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
         )
 
+    if embed_mode:
+        return _finalize_powerbi_html(fig, is_3d=True)
     return to_html(
         fig,
         include_plotlyjs="cdn",
@@ -739,6 +804,7 @@ def plot_author_comparison(
     fines_low_label=None,
     fines_high_label=None,
     show_fines_band=False,
+    embed_mode: bool = False,
 ):
     """
     Genera grafica de comparacion de correlaciones con colores distintos.
@@ -895,11 +961,11 @@ def plot_author_comparison(
                 marker={"size": 9, "color": "#111111", "line": {"color": "#ffffff", "width": 1}},
             )
         )
-    
+
     title_band_color = "#1f4e79"
     title_text_color = "#ffffff"
     annotations = []
-    if title:
+    if title and not embed_mode:
         annotations.append(
             {
                 "x": 0.5,
@@ -1071,6 +1137,8 @@ def plot_author_comparison(
             font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
         )
 
+    if embed_mode:
+        return _finalize_powerbi_html(fig, is_3d=False, div_id="comparison-plot")
     return fig.to_html(div_id="comparison-plot", include_plotlyjs="cdn")
 
 
@@ -1080,6 +1148,7 @@ def plot_fines_phi_relationship(
     fines_label="Porcentaje de finos (%)",
     phi_label="Ángulo de fricción, φ (grados)",
     title="Relación entre finos y φ",
+    embed_mode: bool = False,
 ):
     fines = np.asarray(fines, dtype=float)
     phi = np.asarray(phi, dtype=float)
@@ -1130,7 +1199,7 @@ def plot_fines_phi_relationship(
     title_band_color = "#1f4e79"
     title_text_color = "#ffffff"
     annotations = []
-    if title:
+    if title and not embed_mode:
         annotations.append(
             {
                 "x": 0.5,
@@ -1150,11 +1219,11 @@ def plot_fines_phi_relationship(
         )
 
     stats_lines = []
-    if equation_text:
+    if equation_text and not embed_mode:
         stats_lines.append(f"<b><span style='color:#1f4e79'>{equation_text}</span></b>")
-    if r2_value is not None:
+    if r2_value is not None and not embed_mode:
         stats_lines.append(f"R² = {r2_value:.4f}")
-    if rmse_value is not None:
+    if rmse_value is not None and not embed_mode:
         stats_lines.append(f"RMSE = {rmse_value:.4f}")
     if stats_lines:
         annotations.append(
@@ -1265,6 +1334,8 @@ def plot_fines_phi_relationship(
         paper_bgcolor="white",
     )
 
+    if embed_mode:
+        return _finalize_powerbi_html(fig, is_3d=False, div_id="fines-phi-plot")
     return fig.to_html(div_id="fines-phi-plot", include_plotlyjs="cdn")
 
 
