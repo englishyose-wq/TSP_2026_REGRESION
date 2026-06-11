@@ -59,6 +59,10 @@ def _finalize_powerbi_html(fig, is_3d=False, div_id=None):
         if fig.layout.yaxis:
             layout_update["yaxis"] = fig.layout.yaxis.to_plotly_json()
     fig.update_layout(**layout_update)
+    # Asegurar que el modo Power BI no conserve paneles o capas extras.
+    fig.layout.shapes = []
+    fig.layout.annotations = []
+
     if div_id:
         return fig.to_html(div_id=div_id, include_plotlyjs="cdn", config=_EMBED_HTML_CONFIG)
     return to_html(
