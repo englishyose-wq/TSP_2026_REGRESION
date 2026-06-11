@@ -380,7 +380,21 @@ def _train_one_target(
     try:
         OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
         latest_xlsx_path = OUTPUTS_DIR / "latest_regression_data.xlsx"
-        subset.to_excel(latest_xlsx_path, index=False)
+        # Crear un Excel con dos hojas: 'data' (subset usado) y 'summary' (ecuación y métricas)
+        summary_df = pd.DataFrame(
+            {
+                "metric": ["equation", "r2", "rmse", "dispersion_percent"],
+                "value": [
+                    best.equation,
+                    float(best.r2) if hasattr(best, "r2") else None,
+                    float(best.rmse) if hasattr(best, "rmse") else None,
+                    float(best.mape) if hasattr(best, "mape") else None,
+                ],
+            }
+        )
+        with pd.ExcelWriter(latest_xlsx_path, engine="openpyxl") as writer:
+            subset.to_excel(writer, sheet_name="data", index=False)
+            summary_df.to_excel(writer, sheet_name="summary", index=False)
     except Exception:
         # No detener el entrenamiento si la escritura falla; simplemente ignorar
         pass
