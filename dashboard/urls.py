@@ -9,6 +9,7 @@ from .views import (
     powerbi_excel_view,
     powerbi_view,
     regression_view,
+    regression_data_xlsx_view,
 )
 
 urlpatterns = [
@@ -20,4 +21,5 @@ urlpatterns = [
     path("powerbi/excel/", powerbi_excel_view, name="powerbi_excel"),
     path("powerbi/data.csv", powerbi_data_csv_view, name="powerbi_data_csv"),
     path("powerbi/data.xlsx", powerbi_data_xlsx_view, name="powerbi_data_xlsx"),
+    path("regression/data.xlsx", regression_data_xlsx_view, name="regression_data_xlsx"),
 ]

@@ -376,6 +376,15 @@ def _train_one_target(
             embed_mode=True,
         )
 
+    # Guardar el subconjunto usado para la regresión como Excel para Power BI
+    try:
+        OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        latest_xlsx_path = OUTPUTS_DIR / "latest_regression_data.xlsx"
+        subset.to_excel(latest_xlsx_path, index=False)
+    except Exception:
+        # No detener el entrenamiento si la escritura falla; simplemente ignorar
+        pass
+
     return {
         "best": best,
         "plot_html": plot_html,
@@ -1106,6 +1115,22 @@ def powerbi_data_xlsx_view(request):
     )
     response = HttpResponse(file_bytes, content_type=content_type)
     response["Content-Disposition"] = f'inline; filename="{Path(filename).name}"'
+    return response
+
+
+def regression_data_xlsx_view(request):
+    """Excel con la tabla usada en la última regresión para Power BI."""
+    latest_xlsx_path = OUTPUTS_DIR / "latest_regression_data.xlsx"
+    if not latest_xlsx_path.exists():
+        return HttpResponse(
+            "No hay datos de regresión guardados todavía.",
+            content_type="text/plain; charset=utf-8",
+            status=404,
+        )
+    with open(latest_xlsx_path, "rb") as fh:
+        data = fh.read()
+    response = HttpResponse(data, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = f'inline; filename="{latest_xlsx_path.name}"'
     return response
 
 
