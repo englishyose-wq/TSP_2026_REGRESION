@@ -684,6 +684,10 @@ def plot_model_comparison_3d(
                 "zeroline": False,
             },
             "domain": {"x": [0.0, 0.72], "y": [0.0, 1.0]},
+            "camera": {
+                "eye": {"x": 1.5, "y": 1.5, "z": 1.3},
+                "center": {"x": 0, "y": 0, "z": 0},
+            },
         },
         scene_dragmode="orbit",
         margin={"l": 90, "r": 40, "t": 160, "b": 80},
