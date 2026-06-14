@@ -37,6 +37,19 @@ def load_uploaded_file():
 def save_plot_snapshot(plot_html, metadata=None, plot_html_embed=None):
     if not plot_html:
         return
+    # If this is a comparison plot, persist to a dedicated outputs file
+    # but DO NOT overwrite the DB singleton snapshot so the regression
+    # `/powerbi/` endpoint keeps showing the latest regression plot.
+    try:
+        if (metadata or {}).get("view_mode") == "comparison":
+            OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+            LATEST_COMPARISON_PLOT_PATH.write_text(plot_html_embed or plot_html, encoding="utf-8")
+            return
+    except Exception:
+        # Non-fatal: fall through to DB update if file write fails
+        pass
+
+    # Default behavior: update the DB snapshot (used for regression and other views)
     snapshot = _get_snapshot()
     snapshot.plot_html = plot_html
     snapshot.plot_html_embed = plot_html_embed or plot_html
@@ -45,14 +58,6 @@ def save_plot_snapshot(plot_html, metadata=None, plot_html_embed=None):
     snapshot.save(
         update_fields=["plot_html", "plot_html_embed", "plot_metadata", "updated_at"]
     )
-    # If this snapshot is a comparison plot, also write a separate HTML file
-    try:
-        if (metadata or {}).get("view_mode") == "comparison":
-            OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-            LATEST_COMPARISON_PLOT_PATH.write_text(snapshot.plot_html_embed or snapshot.plot_html, encoding="utf-8")
-    except Exception:
-        # Non-fatal: do not prevent saving snapshot to DB if file write fails
-        pass
 
 
 def load_plot_html():

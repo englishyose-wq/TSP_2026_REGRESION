@@ -858,19 +858,30 @@ def plot_author_comparison(
             lines.append(r2_text)
         return "<br>".join(lines)
 
+    def _format_legend_name(label):
+        if not label:
+            return label
+        clean = re.sub(r"\s*\(\d{4}\)$", "", label).strip()
+        return clean
+
+    def _legend_label(text, r2_text=""):
+        if embed_mode:
+            return _format_legend_name(text)
+        return _wrap_legend_label(f"{text}{r2_text}")
+
     # Agregar series de comparacion (autores) con colores distintos
     color_idx = 0
     for col_name, col_values in comparison_series.items():
         if col_name != your_column_name and len(col_values) > 0:
             r2_text = ""
-            if r2_by_series and col_name in r2_by_series:
+            if r2_by_series and col_name in r2_by_series and not embed_mode:
                 r2_text = f" (R²={r2_by_series[col_name]:.4f})"
             fig.add_trace(
                 go.Scatter(
                     x=x,
                     y=col_values,
                     mode="lines+markers",
-                    name=_wrap_legend_label(f"{col_name}{r2_text}"),
+                    name=_legend_label(col_name, r2_text),
                     line={
                         "color": palette[color_idx % len(palette)],
                         "width": 2,
@@ -922,14 +933,14 @@ def plot_author_comparison(
     # Agregar tu correlacion en ultimo lugar (resaltada)
     if len(your_y) > 0:
         your_r2_text = ""
-        if r2_your is not None:
+        if r2_your is not None and not embed_mode:
             your_r2_text = f" (R²={r2_your:.4f})"
         fig.add_trace(
             go.Scatter(
                 x=x,
                 y=your_y,
                 mode="lines+markers",
-                name=_wrap_legend_label(f"{your_column_name}{your_r2_text}"),
+                name=_legend_label(your_column_name, your_r2_text),
                 line={"color": "#8b1e3f", "width": 2, "dash": "dash"},
                 marker={"size": 7, "color": "#8b1e3f", "symbol": "circle", "line": {"color": "#ffffff", "width": 1}},
             )
@@ -943,7 +954,7 @@ def plot_author_comparison(
                 y=field_points_y,
                 mode="markers",
                 name="Puntos de ensayo",
-                marker={"size": 12, "color": "#111111", "line": {"color": "#ffffff", "width": 1.5}, "symbol": "circle"},
+                marker={"size": 12, "color": "#123A7D", "line": {"color": "#ffffff", "width": 1.5}, "symbol": "circle"},
             )
         )
 
@@ -978,18 +989,41 @@ def plot_author_comparison(
         hovermode="x unified",
         template="plotly_white",
         height=600 if not embed_mode else None,
-        showlegend=not embed_mode,
-        legend={
-            "x": 0.88,
-            "y": 0.97,
-            "xanchor": "center",
-            "yanchor": "top",
-            "bgcolor": "rgba(255,255,255,0.96)",
-            "bordercolor": "#4a4a4a",
-            "borderwidth": 1.2,
-            "tracegroupgap": 6,
-            "font": {"family": "Times New Roman, Georgia, serif", "size": 11, "color": "#111111"},
-        },
+        showlegend=True,
+        legend=(
+            {
+                "orientation": "h",
+                "x": 0.5,
+                "xanchor": "center",
+                "y": 1.02,
+                "yanchor": "bottom",
+                "bgcolor": "rgba(255,255,255,0.96)",
+                "bordercolor": "#4a4a4a",
+                "borderwidth": 1.2,
+                "tracegroupgap": 6,
+                "font": {
+                    "family": "Segoe UI, Arial, sans-serif",
+                    "size": 14,
+                    "color": "#111111",
+                },
+            }
+            if embed_mode
+            else {
+                "x": 0.88,
+                "y": 0.97,
+                "xanchor": "center",
+                "yanchor": "top",
+                "bgcolor": "rgba(255,255,255,0.96)",
+                "bordercolor": "#4a4a4a",
+                "borderwidth": 1.2,
+                "tracegroupgap": 6,
+                "font": {
+                    "family": "Times New Roman, Georgia, serif",
+                    "size": 11,
+                    "color": "#111111",
+                },
+            }
+        ),
         plot_bgcolor="white",
         paper_bgcolor="white",
         font={"family": "Times New Roman, Georgia, serif", "size": 13, "color": "#111111"},
@@ -1049,85 +1083,75 @@ def plot_author_comparison(
                     },
                 ]
                 if title and not embed_mode
-                else [
-                    {
-                        "type": "rect",
-                        "xref": "paper",
-                        "yref": "paper",
-                        "x0": 0.76,
-                        "x1": 1.0,
-                        "y0": 0.0,
-                        "y1": 1.0,
-                        "fillcolor": "rgba(245,247,250,0.95)",
-                        "layer": "below",
-                        "line": {"color": "#c7c7c7", "width": 1},
-                    }
-                ]
-            )
+                        else []
+                    )
         ) if not embed_mode else [],
         margin={"l": 90, "r": 40, "t": 160 if not embed_mode else 30, "b": 80 if not embed_mode else 40},
     )
     
     if show_fines_band and fines_low is not None and fines_high is not None:
-        if not embed_mode:
-            fig.add_annotation(
-                x=0.88,
-                y=0.24,
-                xref="paper",
-                yref="paper",
-                text="<b>Finos</b>",
-                showarrow=False,
-                align="center",
-                bgcolor="rgba(255,255,255,0.96)",
-                bordercolor="#4a4a4a",
-                borderwidth=1.2,
-                borderpad=6,
-                font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
-            )
-            fig.add_shape(
-                type="line",
-                xref="paper",
-                yref="paper",
-                x0=0.84,
-                x1=0.92,
-                y0=0.19,
-                y1=0.19,
-                line={"color": "#5b9bd5", "width": 2, "dash": "dot"},
-            )
-            fig.add_annotation(
-                x=0.925,
-                y=0.19,
-                xref="paper",
-                yref="paper",
-                text=low_label,
-                showarrow=False,
-                align="left",
-                font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
-            )
-            fig.add_shape(
-                type="line",
-                xref="paper",
-                yref="paper",
-                x0=0.84,
-                x1=0.92,
-                y0=0.14,
-                y1=0.14,
-                line={"color": "#2b6ea6", "width": 2, "dash": "dash"},
-            )
-            fig.add_annotation(
-                x=0.925,
-                y=0.14,
-                xref="paper",
-                yref="paper",
-                text=high_label,
-                showarrow=False,
-                align="left",
-                font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
-            )
+        # Mostrar la banda de finos y sus indicadores también en embed_mode
+        fig.add_annotation(
+            x=0.88,
+            y=0.24,
+            xref="paper",
+            yref="paper",
+            text="<b>Finos</b>",
+            showarrow=False,
+            align="center",
+            bgcolor="rgba(255,255,255,0.96)",
+            bordercolor="#4a4a4a",
+            borderwidth=1.2,
+            borderpad=6,
+            font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
+        )
+        fig.add_shape(
+            type="line",
+            xref="paper",
+            yref="paper",
+            x0=0.84,
+            x1=0.92,
+            y0=0.19,
+            y1=0.19,
+            line={"color": "#5b9bd5", "width": 2, "dash": "dot"},
+        )
+        fig.add_annotation(
+            x=0.925,
+            y=0.19,
+            xref="paper",
+            yref="paper",
+            text=low_label,
+            showarrow=False,
+            align="left",
+            font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
+        )
+        fig.add_shape(
+            type="line",
+            xref="paper",
+            yref="paper",
+            x0=0.84,
+            x1=0.92,
+            y0=0.14,
+            y1=0.14,
+            line={"color": "#2b6ea6", "width": 2, "dash": "dash"},
+        )
+        fig.add_annotation(
+            x=0.925,
+            y=0.14,
+            xref="paper",
+            yref="paper",
+            text=high_label,
+            showarrow=False,
+            align="left",
+            font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
+        )
 
-    return fig.to_html(
+    # Generate HTML. For embed_mode we inject a small CSS snippet to round
+    # the legend box and force the border color/thickness (Power BI embed).
+    html = fig.to_html(
         div_id="comparison-plot",
         include_plotlyjs="cdn",
+        full_html=True,
         config={
             "displayModeBar": False,
             "displaylogo": False,
@@ -1136,6 +1160,61 @@ def plot_author_comparison(
             "responsive": True,
         },
     )
+
+    if embed_mode:
+        style = (
+            "<style>"
+            "#comparison-plot .legend { background: white !important; border-radius: 8px !important; box-shadow: none !important; padding: 6px !important; border: 1px solid #123A7D !important; }"
+            "#comparison-plot svg .legend rect { stroke: #123A7D !important; stroke-width: 1px !important; fill: white !important; }"
+            "#comparison-plot svg .legend g rect { stroke: #123A7D !important; stroke-width: 1px !important; fill: white !important; }"
+            "#comparison-plot .legend { color: #111111 !important; }"
+            "</style>"
+        )
+        script = """
+<script>
+(function(){
+    try{
+        var root = document.getElementById('comparison-plot');
+        if(!root) return;
+        var svgs = root.getElementsByTagName('svg');
+        for(var i=0;i<svgs.length;i++){
+            var svg = svgs[i];
+            // Find legend groups inside this SVG
+            var legendGroups = svg.querySelectorAll('g[class*="legend"]');
+            legendGroups.forEach(function(legend){
+                var rects = Array.prototype.slice.call(legend.querySelectorAll('rect'));
+                if(rects.length===0) return;
+                // determine the largest rect (outer box)
+                var outer = rects.reduce(function(best, r){ try{ var bb=r.getBBox(); var area=bb.width*bb.height; var bestBb=best?best.getBBox():{width:0,height:0}; var bestArea=bestBb.width*bestBb.height; return area>bestArea?r:best; }catch(e){return best;} }, null);
+                if(outer){ try{ outer.setAttribute('fill','#ffffff'); outer.setAttribute('stroke','#123A7D'); outer.setAttribute('stroke-width','1'); outer.setAttribute('rx','8'); outer.setAttribute('ry','8'); }catch(e){} }
+                try{ var outerBb = outer.getBBox(); }catch(e){ outerBb={width:Infinity,height:Infinity}; }
+                // remove small rects that are clearly per-item boxes (width much smaller than outer)
+                rects.forEach(function(r){ try{ if(r!==outer){ var bb=r.getBBox(); if(bb.width < outerBb.width*0.5){ r.parentNode.removeChild(r); } } }catch(e){} });
+            });
+        }
+        var htmlLegends = root.querySelectorAll('.legend');
+        htmlLegends.forEach(function(el){ el.style.background='white'; el.style.borderRadius='8px'; el.style.border='1px solid #123A7D'; el.style.padding='6px'; });
+    }catch(e){console.warn(e);} 
+})();
+</script>
+"""
+
+        # Insert style into <head> if present, and script before </body> to run after render
+        head_close = "</head>"
+        idx_head = html.find(head_close)
+        if idx_head != -1:
+            html = html[:idx_head] + style + html[idx_head:]
+        else:
+            html = style + html
+
+        body_close = "</body>"
+        idx_body = html.find(body_close)
+        if idx_body != -1:
+            html = html[:idx_body] + script + html[idx_body:]
+        else:
+            html = html + script
+
+    return html
 
 
 def plot_fines_phi_relationship(
