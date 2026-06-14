@@ -36,17 +36,34 @@
         </div>
     {% endif %}
     <script>
-        // Resize Plotly charts when embedding (Power BI iframe can change size)
+        // Forzar que plotly use 100% del contenedor y redimensionar
         (function(){
+            function forceFullHeight(){
+                try{
+                    var plots = document.getElementsByClassName('plotly-graph-div');
+                    for(var i=0;i<plots.length;i++){
+                        var gd = plots[i];
+                        // eliminar atributo height inline si existe
+                        try{ gd.removeAttribute('height'); }catch(e){}
+                        // forzar estilo con prioridad
+                        try{ gd.style.setProperty('height','100%','important'); gd.style.setProperty('min-height','0','important'); }catch(e){}
+                    }
+                }catch(e){}
+            }
             function resizeAll(){
                 try{
                     var plots = document.getElementsByClassName('plotly-graph-div');
-                    for(var i=0;i<plots.length;i++){ var gd = plots[i]; if(window.Plotly) try{ Plotly.Plots.resize(gd); }catch(e){} }
+                    for(var i=0;i<plots.length;i++){
+                        var gd = plots[i];
+                        if(window.Plotly) try{ Plotly.Plots.resize(gd); }catch(e){}
+                    }
                 }catch(e){}
             }
-            window.addEventListener('load', resizeAll);
-            window.addEventListener('resize', resizeAll);
-            setTimeout(resizeAll, 500);
+            window.addEventListener('load', function(){ forceFullHeight(); resizeAll(); });
+            window.addEventListener('resize', function(){ forceFullHeight(); resizeAll(); });
+            // algunos hosts cambian el tamaño despues de cargar
+            setTimeout(function(){ forceFullHeight(); resizeAll(); }, 500);
+            setTimeout(function(){ forceFullHeight(); resizeAll(); }, 1500);
         })();
     </script>
 </body>

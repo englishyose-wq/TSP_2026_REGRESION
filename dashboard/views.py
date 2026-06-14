@@ -323,8 +323,8 @@ def _train_one_target(
     )
     best = analysis["best"]
 
-    ylabel = "Ángulo de fricción, φ"
-    title = "Relación entre N<sub>60</sub> y el ángulo de fricción φ"
+    ylabel = "Ángulo de fricción interna, φ (°)"
+    title = "Relación entre N<sub>60</sub> y el ángulo de fricción interna, φ (°)"
 
     point_labels = subset["point_code"].values if "point_code" in subset.columns else None
     
@@ -874,8 +874,8 @@ def comparison_view(request):
             r2_your = r2_score(field_y, your_y)
 
             # Set title and ylabel based on target_type
-            ylabel = "Angulo de friccion, phi (grados)"
-            title = "Comparacion de correlaciones para phi"
+            ylabel = "Ángulo de fricción interna, φ (°)"
+            title = "Comparación de correlaciones para φ"
 
             # Generate comparison plot
             comparison_kwargs = {
@@ -1014,7 +1014,7 @@ def fines_view(request):
 
             fines_plot_kwargs = {
                 "fines_label": "Porcentaje de finos (%)",
-                "phi_label": "Ángulo de fricción, φ (grados)",
+                "phi_label": "Ángulo de fricción interna, φ (°)",
                 "title": "Relación entre porcentaje de finos y φ",
             }
             plot_html = plot_fines_phi_relationship(fines_values, phi_values, **fines_plot_kwargs)
