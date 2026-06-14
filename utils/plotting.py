@@ -93,6 +93,7 @@ def plot_model_comparison(
             )
         
         # Agregar barras de dispersión por grupo con el color del grupo
+        best_pred = None
         if len(results) > 0:
             try:
                 best_pred = predict(results[0], x)
@@ -143,6 +144,7 @@ def plot_model_comparison(
         )
         
         # Agregar barras de dispersión en gris (sin labels)
+        best_pred = None
         if len(results) > 0:
             try:
                 best_pred = predict(results[0], x)
@@ -928,8 +930,8 @@ def plot_author_comparison(
                 y=your_y,
                 mode="lines+markers",
                 name=_wrap_legend_label(f"{your_column_name}{your_r2_text}"),
-                line={"color": "#8b1e3f", "width": 3.5, "dash": "solid"},
-                marker={"size": 10, "color": "#8b1e3f", "symbol": "circle", "line": {"color": "#ffffff", "width": 1.5}},
+                line={"color": "#8b1e3f", "width": 2, "dash": "dash"},
+                marker={"size": 7, "color": "#8b1e3f", "symbol": "circle", "line": {"color": "#ffffff", "width": 1}},
             )
         )
 
@@ -944,6 +946,11 @@ def plot_author_comparison(
                 marker={"size": 12, "color": "#111111", "line": {"color": "#ffffff", "width": 1.5}, "symbol": "circle"},
             )
         )
+
+    # Inicializar anotaciones y colores del encabezado (solo para la vista de comparación)
+    title_band_color = "#1f4e79"
+    title_text_color = "#ffffff"
+    annotations = []
 
     if title and not embed_mode:
         annotations.append(
@@ -971,7 +978,7 @@ def plot_author_comparison(
         hovermode="x unified",
         template="plotly_white",
         height=600 if not embed_mode else None,
-        showlegend=True,
+        showlegend=not embed_mode,
         legend={
             "x": 0.88,
             "y": 0.97,
@@ -1062,60 +1069,61 @@ def plot_author_comparison(
     )
     
     if show_fines_band and fines_low is not None and fines_high is not None:
-        fig.add_annotation(
-            x=0.88,
-            y=0.24,
-            xref="paper",
-            yref="paper",
-            text="<b>Finos</b>",
-            showarrow=False,
-            align="center",
-            bgcolor="rgba(255,255,255,0.96)",
-            bordercolor="#4a4a4a",
-            borderwidth=1.2,
-            borderpad=6,
-            font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
-        )
-        fig.add_shape(
-            type="line",
-            xref="paper",
-            yref="paper",
-            x0=0.84,
-            x1=0.92,
-            y0=0.19,
-            y1=0.19,
-            line={"color": "#5b9bd5", "width": 2, "dash": "dot"},
-        )
-        fig.add_annotation(
-            x=0.925,
-            y=0.19,
-            xref="paper",
-            yref="paper",
-            text=low_label,
-            showarrow=False,
-            align="left",
-            font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
-        )
-        fig.add_shape(
-            type="line",
-            xref="paper",
-            yref="paper",
-            x0=0.84,
-            x1=0.92,
-            y0=0.14,
-            y1=0.14,
-            line={"color": "#2b6ea6", "width": 2, "dash": "dash"},
-        )
-        fig.add_annotation(
-            x=0.925,
-            y=0.14,
-            xref="paper",
-            yref="paper",
-            text=high_label,
-            showarrow=False,
-            align="left",
-            font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
-        )
+        if not embed_mode:
+            fig.add_annotation(
+                x=0.88,
+                y=0.24,
+                xref="paper",
+                yref="paper",
+                text="<b>Finos</b>",
+                showarrow=False,
+                align="center",
+                bgcolor="rgba(255,255,255,0.96)",
+                bordercolor="#4a4a4a",
+                borderwidth=1.2,
+                borderpad=6,
+                font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
+            )
+            fig.add_shape(
+                type="line",
+                xref="paper",
+                yref="paper",
+                x0=0.84,
+                x1=0.92,
+                y0=0.19,
+                y1=0.19,
+                line={"color": "#5b9bd5", "width": 2, "dash": "dot"},
+            )
+            fig.add_annotation(
+                x=0.925,
+                y=0.19,
+                xref="paper",
+                yref="paper",
+                text=low_label,
+                showarrow=False,
+                align="left",
+                font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
+            )
+            fig.add_shape(
+                type="line",
+                xref="paper",
+                yref="paper",
+                x0=0.84,
+                x1=0.92,
+                y0=0.14,
+                y1=0.14,
+                line={"color": "#2b6ea6", "width": 2, "dash": "dash"},
+            )
+            fig.add_annotation(
+                x=0.925,
+                y=0.14,
+                xref="paper",
+                yref="paper",
+                text=high_label,
+                showarrow=False,
+                align="left",
+                font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
+            )
 
     return fig.to_html(
         div_id="comparison-plot",

@@ -1,8 +1,13 @@
 from django.utils import timezone
+from pathlib import Path
 
 from .models import LatestSnapshot
 
 SINGLETON_PK = 1
+
+# Outputs directory (same location as used in views)
+OUTPUTS_DIR = Path(__file__).resolve().parent.parent / "outputs"
+LATEST_COMPARISON_PLOT_PATH = OUTPUTS_DIR / "latest_powerbi_plot_comparison.html"
 
 
 def _get_snapshot():
@@ -40,6 +45,14 @@ def save_plot_snapshot(plot_html, metadata=None, plot_html_embed=None):
     snapshot.save(
         update_fields=["plot_html", "plot_html_embed", "plot_metadata", "updated_at"]
     )
+    # If this snapshot is a comparison plot, also write a separate HTML file
+    try:
+        if (metadata or {}).get("view_mode") == "comparison":
+            OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+            LATEST_COMPARISON_PLOT_PATH.write_text(snapshot.plot_html_embed or snapshot.plot_html, encoding="utf-8")
+    except Exception:
+        # Non-fatal: do not prevent saving snapshot to DB if file write fails
+        pass
 
 
 def load_plot_html():
@@ -55,6 +68,26 @@ def load_plot_html_embed():
         return snapshot.plot_html_embed
     if snapshot and snapshot.plot_html:
         return snapshot.plot_html
+    return None
+
+
+def load_plot_html_embed_for(view_mode: str):
+    """Load an embed HTML for a specific view_mode.
+
+    For `comparison` first try the file in outputs/, otherwise fall back to the DB snapshot
+    if its metadata matches the requested view_mode.
+    """
+    try:
+        if view_mode == "comparison" and LATEST_COMPARISON_PLOT_PATH.exists():
+            return LATEST_COMPARISON_PLOT_PATH.read_text(encoding="utf-8")
+    except Exception:
+        pass
+
+    snapshot = LatestSnapshot.objects.filter(pk=SINGLETON_PK).first()
+    if not snapshot:
+        return None
+    if (snapshot.plot_metadata or {}).get("view_mode") == view_mode:
+        return snapshot.plot_html_embed or snapshot.plot_html
     return None
 
 

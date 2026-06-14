@@ -1,4 +1,5 @@
 import base64
+import csv
 from pathlib import Path
 
 import pandas as pd
@@ -18,12 +19,14 @@ from utils.plotting import (
     plot_model_comparison,
     plot_model_comparison_3d,
 )
+from utils.metrics import r2_score, rmse, mape
 
 from .forms import FinesUploadForm, UploadForm
 from .persistence import (
     load_latest_upload_metadata,
     load_plot_html,
     load_plot_html_embed,
+    load_plot_html_embed_for,
     load_plot_metadata,
     load_snapshot_status,
     load_uploaded_file,
@@ -864,14 +867,28 @@ def comparison_view(request):
                     # Use values from the sorted, clean dataframe
                     series_data[col] = df_numeric[col].values
 
-            # Compute R2 for each author series vs field points
-            from utils.metrics import r2_score
+            # Compute metrics for each author series vs field points
             r2_by_series = {}
+            rmse_by_series = {}
+            mape_by_series = {}
             for col_name, col_values in series_data.items():
                 if col_name == your_column:
                     continue
-                r2_by_series[col_name] = r2_score(field_y, col_values)
-            r2_your = r2_score(field_y, your_y)
+                try:
+                    r2_val = r2_score(field_y, col_values)
+                    rmse_val = rmse(field_y, col_values)
+                    mape_val = mape(field_y, col_values)
+                except Exception:
+                    r2_val = 0.0
+                    rmse_val = 0.0
+                    mape_val = 0.0
+                r2_by_series[col_name] = r2_val
+                rmse_by_series[col_name] = rmse_val
+                mape_by_series[col_name] = mape_val
+            try:
+                r2_your = r2_score(field_y, your_y)
+            except Exception:
+                r2_your = 0.0
 
             # Set title and ylabel based on target_type
             ylabel = "Ángulo de fricción interna, φ (°)"
@@ -899,6 +916,81 @@ def comparison_view(request):
             }
             plot_html = plot_author_comparison(**comparison_kwargs)
             plot_html_embed = plot_author_comparison(**comparison_kwargs, embed_mode=True)
+
+            # Guardar Excel y CSV de métricas para Power BI
+            try:
+                palette = [
+                    "#1f77b4",
+                    "#ff7f0e",
+                    "#2ca02c",
+                    "#d62728",
+                    "#9467bd",
+                    "#8c564b",
+                    "#e377c2",
+                    "#7f7f7f",
+                    "#bcbd22",
+                    "#17becf",
+                ]
+                dash_styles = [
+                    "solid",
+                    "dash",
+                    "dot",
+                    "dashdot",
+                    "longdash",
+                    "longdashdot",
+                    "dash",
+                    "dot",
+                    "longdash",
+                    "dashdot",
+                ]
+                rows = []
+                color_idx = 0
+                for col_name in series_data:
+                    if col_name == your_column:
+                        continue
+                    rows.append(
+                        {
+                            "author": col_name,
+                            "r2": float(r2_by_series.get(col_name, 0.0)),
+                            "rmse": float(rmse_by_series.get(col_name, 0.0)),
+                            "dispersion": float(mape_by_series.get(col_name, 0.0)),
+                            "line_color": palette[color_idx % len(palette)],
+                            "line_dash": dash_styles[color_idx % len(dash_styles)],
+                        }
+                    )
+                    color_idx += 1
+                rows.append(
+                    {
+                        "author": your_column,
+                        "r2": float(r2_your or 0.0),
+                        "rmse": float(rmse(field_y, your_y) if len(your_y) and len(field_y) else 0.0),
+                        "dispersion": float(mape(field_y, your_y) if len(your_y) and len(field_y) else 0.0),
+                        "line_color": palette[color_idx % len(palette)],
+                        "line_dash": dash_styles[color_idx % len(dash_styles)],
+                    }
+                )
+                OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+                csv_path = OUTPUTS_DIR / "latest_powerbi_comparison.csv"
+                with csv_path.open("w", encoding="utf-8", newline="") as fh:
+                    writer = csv.DictWriter(
+                        fh,
+                        fieldnames=["author", "r2", "rmse", "dispersion", "line_color", "line_dash"],
+                    )
+                    writer.writeheader()
+                    for row in rows:
+                        writer.writerow(row)
+                # Save a comparison Excel file for Power BI
+                series_df = pd.DataFrame({"N60": x})
+                for col_name, col_values in series_data.items():
+                    series_df[col_name] = col_values
+                series_df[your_column] = your_y
+                metrics_df = pd.DataFrame(rows)
+                latest_xlsx_path = OUTPUTS_DIR / "latest_powerbi_comparison.xlsx"
+                with pd.ExcelWriter(latest_xlsx_path, engine="openpyxl") as writer:
+                    metrics_df.to_excel(writer, sheet_name="metrics", index=False)
+                    series_df.to_excel(writer, sheet_name="series", index=False)
+            except Exception:
+                pass
 
             context["comparison_plot_html"] = plot_html
             context["message"] = "Grafica de comparacion generada correctamente."
@@ -1068,6 +1160,52 @@ def _load_latest_all_sheets():
 def powerbi_view(request):
     """Vista pública mínima para Power BI: solo la gráfica limpia."""
     plot_html = load_plot_html_embed()
+    return render(
+        request,
+        "powerbi.html",
+        {
+            "plot_html": plot_html,
+            "has_plot": bool(plot_html),
+        },
+    )
+
+
+def powerbi_comparison_csv_view(request):
+    csv_path = OUTPUTS_DIR / "latest_powerbi_comparison.csv"
+    if not csv_path.exists():
+        return HttpResponse(
+            "No hay tabla de comparación disponible todavía.",
+            content_type="text/plain; charset=utf-8",
+            status=404,
+        )
+    with csv_path.open("rb") as fh:
+        data = fh.read()
+    response = HttpResponse(data, content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = f'inline; filename="{csv_path.name}"'
+    return response
+
+
+def powerbi_comparison_data_xlsx_view(request):
+    xlsx_path = OUTPUTS_DIR / "latest_powerbi_comparison.xlsx"
+    if not xlsx_path.exists():
+        return HttpResponse(
+            "No hay Excel de comparación disponible todavía.",
+            content_type="text/plain; charset=utf-8",
+            status=404,
+        )
+    with xlsx_path.open("rb") as fh:
+        data = fh.read()
+    response = HttpResponse(
+        data,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'inline; filename="{xlsx_path.name}"'
+    return response
+
+
+def powerbi_comparison_view(request):
+    """Vista pública mínima para Power BI: gráfica de comparación separada."""
+    plot_html = load_plot_html_embed_for("comparison")
     return render(
         request,
         "powerbi.html",
