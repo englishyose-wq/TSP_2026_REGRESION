@@ -137,7 +137,7 @@ def plot_model_comparison(
     title_band_color = "#1f4e79"
     title_text_color = "#ffffff"
     annotations = []
-    if title:
+    if title and not embed_mode:
         annotations.append(
             {
                 "x": 0.5,
@@ -165,7 +165,7 @@ def plot_model_comparison(
         stats_lines.append(f"RMSE = {rmse_value:.4f}")
     if mape_value is not None:
         stats_lines.append(f"Dispersión = {mape_value:.2f}%")
-    if stats_lines:
+    if stats_lines and not embed_mode:
         annotations.append(
             {
                 "x": 0.96,
@@ -269,7 +269,7 @@ def plot_model_comparison(
                     "line": {"color": "#c7c7c7", "width": 1},
                 },
             ]
-            if title
+            if title and not embed_mode
             else [
                 {
                     "type": "rect",
@@ -284,7 +284,7 @@ def plot_model_comparison(
                     "line": {"color": "#c7c7c7", "width": 1},
                 }
             ]
-        ),
+        ) if not embed_mode else [],
         margin={"l": 90, "r": 40, "t": 160, "b": 80},
         plot_bgcolor="white",
         paper_bgcolor="white",
@@ -293,7 +293,7 @@ def plot_model_comparison(
     if not embed_mode:
         fig.update_layout(height=640)
 
-    if prefix_counts:
+    if prefix_counts and not embed_mode:
         values = [prefix_counts[p] for p in (prefix_order or prefix_counts.keys())]
         total_points = sum(values)
         text_positions = [
@@ -359,6 +359,7 @@ def plot_model_comparison_3d(
     rmse_value: float | None = None,
     mape_value: float | None = None,
     point_labels: np.ndarray | None = None,
+    embed_mode: bool = False,
 ):
     x = np.asarray(x, dtype=float)
     fines = np.asarray(fines, dtype=float)
@@ -457,7 +458,7 @@ def plot_model_comparison_3d(
     title_band_color = "#1f4e79"
     title_text_color = "#ffffff"
     annotations = []
-    if title:
+    if title and not embed_mode:
         annotations.append(
             {
                 "x": 0.5,
@@ -491,7 +492,7 @@ def plot_model_comparison_3d(
         stats_lines.append(f"RMSE = {rmse_value:.4f}")
     if mape_value is not None:
         stats_lines.append(f"Dispersión = {mape_value:.2f}%")
-    if stats_lines:
+    if stats_lines and not embed_mode:
         annotations.append(
             {
                 "x": 0.96,
@@ -553,7 +554,7 @@ def plot_model_comparison_3d(
         },
         scene_dragmode="orbit",
         margin={"l": 90, "r": 40, "t": 160, "b": 80},
-        height=640,
+        height=640 if not embed_mode else None,
         template="plotly_white",
         font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
         showlegend=False,
@@ -599,10 +600,10 @@ def plot_model_comparison_3d(
                     "line": {"color": "#c7c7c7", "width": 1},
                 }
             ]
-        ),
+        ) if not embed_mode else [],
     )
 
-    if prefix_counts:
+    if prefix_counts and not embed_mode:
         values = [prefix_counts[p] for p in (prefix_order or prefix_counts.keys())]
         total_points = sum(values)
         text_positions = [
@@ -672,6 +673,7 @@ def plot_author_comparison(
     fines_low_label=None,
     fines_high_label=None,
     show_fines_band=False,
+    embed_mode=False,
 ):
     """
     Genera grafica de comparacion de correlaciones con colores distintos.
@@ -832,7 +834,7 @@ def plot_author_comparison(
     title_band_color = "#1f4e79"
     title_text_color = "#ffffff"
     annotations = []
-    if title:
+    if title and not embed_mode:
         annotations.append(
             {
                 "x": 0.5,
@@ -857,7 +859,7 @@ def plot_author_comparison(
         yaxis_title=ylabel or "Valor",
         hovermode="x unified",
         template="plotly_white",
-        height=600,
+        height=600 if not embed_mode else None,
         showlegend=True,
         legend={
             "x": 0.88,
@@ -877,7 +879,7 @@ def plot_author_comparison(
             "title": {
                 "font": {"family": "Times New Roman, Georgia, serif", "size": 18, "color": "#111111"}
             },
-            "domain": [0.0, 0.68],
+            "domain": [0.0, 1.0] if embed_mode else [0.0, 0.68],
             "showgrid": True,
             "gridwidth": 1,
             "gridcolor": "#e0e0e0",
@@ -928,7 +930,7 @@ def plot_author_comparison(
                         "line": {"color": "#c7c7c7", "width": 1},
                     },
                 ]
-                if title
+                if title and not embed_mode
                 else [
                     {
                         "type": "rect",
@@ -944,7 +946,7 @@ def plot_author_comparison(
                     }
                 ]
             )
-        ),
+        ) if not embed_mode else [],
         margin={"l": 90, "r": 40, "t": 160, "b": 80},
     )
     
@@ -1004,15 +1006,26 @@ def plot_author_comparison(
             font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
         )
 
-    return fig.to_html(div_id="comparison-plot", include_plotlyjs="cdn")
+    return fig.to_html(
+        div_id="comparison-plot",
+        include_plotlyjs="cdn",
+        config={
+            "displayModeBar": False,
+            "displaylogo": False,
+            "editable": False,
+            "scrollZoom": False,
+            "responsive": True,
+        },
+    )
 
 
 def plot_fines_phi_relationship(
     fines,
     phi,
     fines_label="Porcentaje de finos (%)",
-    phi_label="Ángulo de fricción, φ (grados)",
+    phi_label="Ángulo de fricción interna, φ (°)",
     title="Relación entre finos y φ",
+    embed_mode=False,
 ):
     fines = np.asarray(fines, dtype=float)
     phi = np.asarray(phi, dtype=float)
@@ -1063,7 +1076,7 @@ def plot_fines_phi_relationship(
     title_band_color = "#1f4e79"
     title_text_color = "#ffffff"
     annotations = []
-    if title:
+    if title and not embed_mode:
         annotations.append(
             {
                 "x": 0.5,
@@ -1089,7 +1102,7 @@ def plot_fines_phi_relationship(
         stats_lines.append(f"R² = {r2_value:.4f}")
     if rmse_value is not None:
         stats_lines.append(f"RMSE = {rmse_value:.4f}")
-    if stats_lines:
+    if stats_lines and not embed_mode:
         annotations.append(
             {
                 "x": 0.96,
@@ -1167,38 +1180,65 @@ def plot_fines_phi_relationship(
             "font": {"family": "Times New Roman, Georgia, serif", "size": 15},
         },
         annotations=annotations,
-        shapes=[
-            {
-                "type": "rect",
-                "xref": "paper",
-                "yref": "paper",
-                "x0": 0.0,
-                "x1": 1.0,
-                "y0": 1.02,
-                "y1": 1.14,
-                "fillcolor": title_band_color,
-                "line": {"width": 0},
-            },
-            {
-                "type": "rect",
-                "xref": "paper",
-                "yref": "paper",
-                "x0": 0.76,
-                "x1": 1.0,
-                "y0": 0.0,
-                "y1": 1.0,
-                "fillcolor": "rgba(245,247,250,0.95)",
-                "layer": "below",
-                "line": {"color": "#c7c7c7", "width": 1},
-            },
-        ],
+        shapes=(
+            [
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.0,
+                    "x1": 1.0,
+                    "y0": 1.02,
+                    "y1": 1.14,
+                    "fillcolor": title_band_color,
+                    "line": {"width": 0},
+                },
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.76,
+                    "x1": 1.0,
+                    "y0": 0.0,
+                    "y1": 1.0,
+                    "fillcolor": "rgba(245,247,250,0.95)",
+                    "layer": "below",
+                    "line": {"color": "#c7c7c7", "width": 1},
+                },
+            ]
+            if title and not embed_mode
+            else [
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.76,
+                    "x1": 1.0,
+                    "y0": 0.0,
+                    "y1": 1.0,
+                    "fillcolor": "rgba(245,247,250,0.95)",
+                    "layer": "below",
+                    "line": {"color": "#c7c7c7", "width": 1},
+                }
+            ]
+        ),
         margin={"l": 90, "r": 40, "t": 160, "b": 80},
-        height=640,
+        height=640 if not embed_mode else None,
         plot_bgcolor="white",
         paper_bgcolor="white",
     )
 
-    return fig.to_html(div_id="fines-phi-plot", include_plotlyjs="cdn")
+    return fig.to_html(
+        div_id="fines-phi-plot",
+        include_plotlyjs="cdn",
+        config={
+            "displayModeBar": False,
+            "displaylogo": False,
+            "editable": False,
+            "scrollZoom": False,
+            "responsive": True,
+        },
+    )
 
 
 def save_fig(fig, path: Path) -> None:
