@@ -271,6 +271,22 @@
                         {% endfor %}
                     </select>
                 </div>
+                <div class="form-group">
+                    <label for="selected_point_code"><strong>Código de punto (opcional)</strong></label>
+                    <select name="selected_point_code" id="selected_point_code">
+                        <option value="">No usar</option>
+                        {% for header in preview_headers %}
+                        <option value="{{ header }}" {% if header == selected_point_code %}selected{% endif %}>{{ header }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="regression_type"><strong>Tipo de ajuste</strong></label>
+                    <select name="regression_type" id="regression_type">
+                        <option value="linear" {% if selected_regression_type == "linear" %}selected{% endif %}>Lineal</option>
+                        <option value="logarithmic" {% if selected_regression_type == "logarithmic" %}selected{% endif %}>Logarítmica</option>
+                    </select>
+                </div>
                 <button type="submit" name="action" value="generate">Generar gráfica de finos</button>
             </div>
             {% endif %}
@@ -278,7 +294,7 @@
             {% if fines_plot_html %}
             <div class="card">
                 <h2>4. Gráfica de finos</h2>
-                <p class="helper-text">La nube de puntos representa los datos del archivo y la línea roja muestra el ajuste lineal.</p>
+                <p class="helper-text">La nube de puntos representa los datos del archivo y la línea roja muestra el ajuste seleccionado.</p>
                 <div class="plot-container">
                     {{ fines_plot_html|safe }}
                 </div>

@@ -250,6 +250,131 @@ def plot_model_comparison(
             }
         )
 
+    # Build shapes list (avoid nested lists which Plotly rejects)
+    if embed_mode:
+        shapes_list = []
+    else:
+        if title:
+            shapes_list = [
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.0,
+                    "x1": 1.0,
+                    "y0": 1.02,
+                    "y1": 1.14,
+                    "fillcolor": title_band_color,
+                    "line": {"width": 0},
+                },
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.76,
+                    "x1": 1.0,
+                    "y0": 0.0,
+                    "y1": 1.0,
+                    "fillcolor": "rgba(245,247,250,0.95)",
+                    "layer": "below",
+                    "line": {"color": "#c7c7c7", "width": 1},
+                },
+            ]
+        else:
+            shapes_list = [
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.76,
+                    "x1": 1.0,
+                    "y0": 0.0,
+                    "y1": 1.0,
+                    "fillcolor": "rgba(245,247,250,0.95)",
+                    "layer": "below",
+                    "line": {"color": "#c7c7c7", "width": 1},
+                }
+            ]
+
+    # Build shapes list (avoid nested lists which Plotly rejects)
+    if embed_mode:
+        shapes_list = []
+    else:
+        if title:
+            shapes_list = [
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.0,
+                    "x1": 1.0,
+                    "y0": 1.02,
+                    "y1": 1.14,
+                    "fillcolor": title_band_color,
+                    "line": {"width": 0},
+                },
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.76,
+                    "x1": 1.0,
+                    "y0": 0.0,
+                    "y1": 1.0,
+                    "fillcolor": "rgba(245,247,250,0.95)",
+                    "layer": "below",
+                    "line": {"color": "#c7c7c7", "width": 1},
+                },
+            ]
+        else:
+            shapes_list = [
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.76,
+                    "x1": 1.0,
+                    "y0": 0.0,
+                    "y1": 1.0,
+                    "fillcolor": "rgba(245,247,250,0.95)",
+                    "layer": "below",
+                    "line": {"color": "#c7c7c7", "width": 1},
+                }
+            ]
+
+    # Build shapes list (avoid nested lists which Plotly rejects)
+    if embed_mode:
+        shapes_list = []
+    else:
+        if title:
+            shapes_list = [
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.0,
+                    "x1": 1.0,
+                    "y0": 1.02,
+                    "y1": 1.14,
+                    "fillcolor": title_band_color,
+                    "line": {"width": 0},
+                },
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.76,
+                    "x1": 1.0,
+                    "y0": 0.0,
+                    "y1": 1.0,
+                    "fillcolor": "rgba(245,247,250,0.95)",
+                    "layer": "below",
+                    "line": {"color": "#c7c7c7", "width": 1},
+                },
+            ]
+        else:
+            shapes_list = []
+
     fig.update_layout(
         title={"text": ""},
         xaxis={
@@ -306,48 +431,7 @@ def plot_model_comparison(
             "font": {"family": "Times New Roman, Georgia, serif", "size": 15},
         },
         annotations=annotations,
-        shapes=(
-            [
-                {
-                    "type": "rect",
-                    "xref": "paper",
-                    "yref": "paper",
-                    "x0": 0.0,
-                    "x1": 1.0,
-                    "y0": 1.02,
-                    "y1": 1.14,
-                    "fillcolor": title_band_color,
-                    "line": {"width": 0},
-                },
-                {
-                    "type": "rect",
-                    "xref": "paper",
-                    "yref": "paper",
-                    "x0": 0.76,
-                    "x1": 1.0,
-                    "y0": 0.0,
-                    "y1": 1.0,
-                    "fillcolor": "rgba(245,247,250,0.95)",
-                    "layer": "below",
-                    "line": {"color": "#c7c7c7", "width": 1},
-                },
-            ]
-            if title and not embed_mode
-            else [
-                {
-                    "type": "rect",
-                    "xref": "paper",
-                    "yref": "paper",
-                    "x0": 0.76,
-                    "x1": 1.0,
-                    "y0": 0.0,
-                    "y1": 1.0,
-                    "fillcolor": "rgba(245,247,250,0.95)",
-                    "layer": "below",
-                    "line": {"color": "#c7c7c7", "width": 1},
-                }
-            ]
-        ) if not embed_mode else [],
+        shapes=shapes_list,
         margin={"l": 90, "r": 40, "t": 160 if not embed_mode else 30, "b": 80 if not embed_mode else 40},
         plot_bgcolor="white",
         paper_bgcolor="white",
@@ -674,48 +758,7 @@ def plot_model_comparison_3d(
         font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
         showlegend=False,
         annotations=annotations,
-        shapes=(
-            [
-                {
-                    "type": "rect",
-                    "xref": "paper",
-                    "yref": "paper",
-                    "x0": 0.0,
-                    "x1": 1.0,
-                    "y0": 1.02,
-                    "y1": 1.14,
-                    "fillcolor": title_band_color,
-                    "line": {"width": 0},
-                },
-                {
-                    "type": "rect",
-                    "xref": "paper",
-                    "yref": "paper",
-                    "x0": 0.76,
-                    "x1": 1.0,
-                    "y0": 0.0,
-                    "y1": 1.0,
-                    "fillcolor": "rgba(245,247,250,0.95)",
-                    "layer": "below",
-                    "line": {"color": "#c7c7c7", "width": 1},
-                }
-            ]
-            if title
-            else [
-                {
-                    "type": "rect",
-                    "xref": "paper",
-                    "yref": "paper",
-                    "x0": 0.76,
-                    "x1": 1.0,
-                    "y0": 0.0,
-                    "y1": 1.0,
-                    "fillcolor": "rgba(245,247,250,0.95)",
-                    "layer": "below",
-                    "line": {"color": "#c7c7c7", "width": 1},
-                }
-            ]
-        ) if not embed_mode else [],
+        shapes=shapes_list,
     )
 
     if prefix_counts and not embed_mode:
@@ -1055,37 +1098,7 @@ def plot_author_comparison(
             "tickfont": {"family": "Times New Roman, Georgia, serif", "size": 14, "color": "#111111"},
         },
         annotations=annotations,
-        shapes=(
-            (
-                [
-                    {
-                        "type": "rect",
-                        "xref": "paper",
-                        "yref": "paper",
-                        "x0": 0.0,
-                        "x1": 1.0,
-                        "y0": 1.02,
-                        "y1": 1.14,
-                        "fillcolor": title_band_color,
-                        "line": {"width": 0},
-                    },
-                    {
-                        "type": "rect",
-                        "xref": "paper",
-                        "yref": "paper",
-                        "x0": 0.76,
-                        "x1": 1.0,
-                        "y0": 0.0,
-                        "y1": 1.0,
-                        "fillcolor": "rgba(245,247,250,0.95)",
-                        "layer": "below",
-                        "line": {"color": "#c7c7c7", "width": 1},
-                    },
-                ]
-                if title and not embed_mode
-                        else []
-                    )
-        ) if not embed_mode else [],
+        shapes=shapes_list,
         margin={"l": 90, "r": 40, "t": 160 if not embed_mode else 30, "b": 80 if not embed_mode else 40},
     )
     
@@ -1223,50 +1236,134 @@ def plot_fines_phi_relationship(
     fines_label="Porcentaje de finos (%)",
     phi_label="Ángulo de fricción interna, φ (°)",
     title="Relación entre finos y φ",
+    regression_type="linear",
+    phi_fit=None,
+    point_labels=None,
     embed_mode=False,
 ):
     fines = np.asarray(fines, dtype=float)
     phi = np.asarray(phi, dtype=float)
+    phi_fit = np.asarray(phi_fit, dtype=float) if phi_fit is not None else phi
+    point_labels = np.asarray(point_labels, dtype=str) if point_labels is not None else None
 
-    valid_mask = np.isfinite(fines) & np.isfinite(phi)
+    if len(phi_fit) != len(phi):
+        raise ValueError("phi_fit debe tener la misma longitud que phi.")
+    if point_labels is not None and len(point_labels) != len(phi):
+        raise ValueError("point_labels debe tener la misma longitud que los datos.")
+
+    valid_mask = np.isfinite(fines) & np.isfinite(phi) & np.isfinite(phi_fit)
     fines = fines[valid_mask]
     phi = phi[valid_mask]
+    phi_fit = phi_fit[valid_mask]
+    if point_labels is not None:
+        point_labels = point_labels[valid_mask]
 
     fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=fines,
-            y=phi,
-            mode="markers",
-            name="Puntos de datos",
-            marker={
-                "color": "#1f4e79",
-                "size": 11,
-                "symbol": "circle",
-                "line": {"color": "#ffffff", "width": 1.5},
-                "opacity": 0.95,
-            },
-            hovertemplate=f"{fines_label}: %{{x:.2f}}<br>{phi_label}: %{{y:.2f}}<extra></extra>",
-        )
+
+    has_labels = (
+        point_labels is not None
+        and len(point_labels) > 0
+        and len(point_labels) == len(fines)
     )
+    if has_labels:
+        prefix_dict = {}
+        for i, label in enumerate(point_labels):
+            label_str = str(label).strip()
+            match = re.match(r"([A-Z]+)", label_str)
+            prefix = match.group(1) if match else "OTRO"
+            if prefix not in prefix_dict:
+                prefix_dict[prefix] = {"indices": [], "labels": []}
+            prefix_dict[prefix]["indices"].append(i)
+            prefix_dict[prefix]["labels"].append(label_str)
+
+        color_palette = [
+            "#1f4e79",
+            "#c00000",
+            "#70ad47",
+            "#ffc000",
+            "#5b9bd5",
+            "#ed7d31",
+            "#a5a5a5",
+            "#44546a",
+            "#e2efda",
+            "#fce4d6",
+        ]
+
+        for idx, (prefix, data) in enumerate(prefix_dict.items()):
+            indices = np.array(data["indices"])
+            labels = data["labels"]
+            color = color_palette[idx % len(color_palette)]
+            fig.add_trace(
+                go.Scatter(
+                    x=fines[indices],
+                    y=phi[indices],
+                    mode="markers+text",
+                    text=labels,
+                    textposition="top center",
+                    textfont={"size": 10, "color": color},
+                    name=prefix,
+                    marker={
+                        "color": color,
+                        "size": 9,
+                        "line": {"color": "#ffffff", "width": 1.2},
+                        "opacity": 0.95,
+                    },
+                    hovertemplate="%{text}<br>FC: %{x:.2f}<br>φ: %{y:.2f}<extra></extra>",
+                )
+            )
+    else:
+        fig.add_trace(
+            go.Scatter(
+                x=fines,
+                y=phi,
+                mode="markers",
+                name="Puntos de datos",
+                marker={
+                    "color": "#1f4e79",
+                    "size": 11,
+                    "symbol": "circle",
+                    "line": {"color": "#ffffff", "width": 1.5},
+                    "opacity": 0.95,
+                },
+                hovertemplate=f"{fines_label}: %{{x:.2f}}<br>{phi_label}: %{{y:.2f}}<extra></extra>",
+            )
+        )
 
     equation_text = None
     r2_value = None
     rmse_value = None
     if len(fines) >= 2:
-        slope, intercept = np.polyfit(fines, phi, 1)
-        line_x = np.linspace(np.min(fines), np.max(fines), 200)
-        line_y = slope * line_x + intercept
-        y_pred = slope * fines + intercept
-        r2_value = r2_score(phi, y_pred)
-        rmse_value = rmse(phi, y_pred)
-        equation_text = f"φ = {slope:.4f}·FC + {intercept:.4f}"
+        if regression_type == "logarithmic":
+            positive_mask = fines > 0
+            if np.sum(positive_mask) < 2:
+                raise ValueError(
+                    "No hay suficientes valores de finos mayores a cero para regresión logarítmica."
+                )
+            log_fines = np.log(fines[positive_mask])
+            fit_phi = phi_fit[positive_mask]
+            slope, intercept = np.polyfit(log_fines, fit_phi, 1)
+            line_x = np.linspace(np.min(fines[positive_mask]), np.max(fines[positive_mask]), 200)
+            line_y = slope * np.log(line_x) + intercept
+            y_pred = slope * np.log(fines[positive_mask]) + intercept
+            r2_value = r2_score(fit_phi, y_pred)
+            rmse_value = rmse(fit_phi, y_pred)
+            equation_text = f"φ = {slope:.4f}·ln(FC) + {intercept:.4f}"
+            trace_name = "Ajuste logarítmico"
+        else:
+            slope, intercept = np.polyfit(fines, phi_fit, 1)
+            line_x = np.linspace(np.min(fines), np.max(fines), 200)
+            line_y = slope * line_x + intercept
+            y_pred = slope * fines + intercept
+            r2_value = r2_score(phi_fit, y_pred)
+            rmse_value = rmse(phi_fit, y_pred)
+            equation_text = f"φ = {slope:.4f}·FC + {intercept:.4f}"
+            trace_name = "Ajuste lineal"
         fig.add_trace(
             go.Scatter(
                 x=line_x,
                 y=line_y,
                 mode="lines",
-                name="Ajuste lineal",
+                name=trace_name,
                 line={"color": "#8b1e3f", "width": 3.2},
                 hoverinfo="skip",
             )
@@ -1334,7 +1431,7 @@ def plot_fines_phi_relationship(
                     "color": "#111111",
                 },
             },
-            "domain": [0.0, 0.72],
+            "domain": [0.0, 1.0] if embed_mode else [0.0, 0.72],
             "showgrid": True,
             "gridwidth": 1,
             "gridcolor": "#e7e7e7",
@@ -1366,7 +1463,7 @@ def plot_fines_phi_relationship(
         },
         template="plotly_white",
         font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
-        showlegend=True,
+        showlegend=False if embed_mode else True,
         legend={
             "orientation": "h",
             "x": 0.99,
@@ -1379,48 +1476,7 @@ def plot_fines_phi_relationship(
             "font": {"family": "Times New Roman, Georgia, serif", "size": 15},
         },
         annotations=annotations,
-        shapes=(
-            [
-                {
-                    "type": "rect",
-                    "xref": "paper",
-                    "yref": "paper",
-                    "x0": 0.0,
-                    "x1": 1.0,
-                    "y0": 1.02,
-                    "y1": 1.14,
-                    "fillcolor": title_band_color,
-                    "line": {"width": 0},
-                },
-                {
-                    "type": "rect",
-                    "xref": "paper",
-                    "yref": "paper",
-                    "x0": 0.76,
-                    "x1": 1.0,
-                    "y0": 0.0,
-                    "y1": 1.0,
-                    "fillcolor": "rgba(245,247,250,0.95)",
-                    "layer": "below",
-                    "line": {"color": "#c7c7c7", "width": 1},
-                },
-            ]
-            if title and not embed_mode
-            else [
-                {
-                    "type": "rect",
-                    "xref": "paper",
-                    "yref": "paper",
-                    "x0": 0.76,
-                    "x1": 1.0,
-                    "y0": 0.0,
-                    "y1": 1.0,
-                    "fillcolor": "rgba(245,247,250,0.95)",
-                    "layer": "below",
-                    "line": {"color": "#c7c7c7", "width": 1},
-                }
-            ]
-        ),
+        shapes=[] if embed_mode else ([{"type": "rect", "xref": "paper", "yref": "paper", "x0": 0.0, "x1": 1.0, "y0": 1.02, "y1": 1.14, "fillcolor": title_band_color, "line": {"width": 0}}, {"type": "rect", "xref": "paper", "yref": "paper", "x0": 0.76, "x1": 1.0, "y0": 0.0, "y1": 1.0, "fillcolor": "rgba(245,247,250,0.95)", "layer": "below", "line": {"color": "#c7c7c7", "width": 1}}] if title else [{"type": "rect", "xref": "paper", "yref": "paper", "x0": 0.76, "x1": 1.0, "y0": 0.0, "y1": 1.0, "fillcolor": "rgba(245,247,250,0.95)", "layer": "below", "line": {"color": "#c7c7c7", "width": 1}}]),
         margin={"l": 90, "r": 40, "t": 160 if not embed_mode else 30, "b": 80 if not embed_mode else 40},
         height=640 if not embed_mode else None,
         plot_bgcolor="white",

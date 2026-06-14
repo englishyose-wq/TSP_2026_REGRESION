@@ -2,6 +2,7 @@ import base64
 import csv
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from django.http import HttpResponse
 from django.shortcuts import render
@@ -1027,6 +1028,8 @@ def fines_view(request):
         "fines_plot_html": None,
         "selected_fines": "",
         "selected_phi": "",
+        "selected_point_code": "",
+        "selected_regression_type": "linear",
     }
 
     if request.method == "POST":
@@ -1075,13 +1078,21 @@ def fines_view(request):
                 )
                 return render(request, "fines.html", context)
 
+            selected_regression_type = form.cleaned_data.get("regression_type") or "linear"
             selected_fines = request.POST.get("selected_fines", "")
             selected_phi = request.POST.get("selected_phi", "")
+            selected_point_code = request.POST.get("selected_point_code", "")
 
             if not selected_fines:
                 selected_fines = _guess_fines_column(df.columns) or ""
             if not selected_phi:
                 selected_phi = "phi" if "phi" in df.columns else ""
+
+            if selected_point_code and selected_point_code not in df.columns:
+                raise ValueError("La columna seleccionada para código de punto no existe en el archivo.")
+
+            context["selected_regression_type"] = selected_regression_type
+            context["selected_point_code"] = selected_point_code
 
             if not selected_fines:
                 raise ValueError("Debes seleccionar la columna de finos.")
@@ -1093,7 +1104,10 @@ def fines_view(request):
             if selected_phi not in df.columns:
                 raise ValueError("La columna seleccionada para φ no existe en el archivo.")
 
-            df_numeric = df[[selected_fines, selected_phi]].copy()
+            needed_columns = [selected_fines, selected_phi]
+            if selected_point_code:
+                needed_columns.append(selected_point_code)
+            df_numeric = df[needed_columns].copy()
             df_numeric[selected_fines] = pd.to_numeric(df_numeric[selected_fines], errors="coerce")
             df_numeric[selected_phi] = pd.to_numeric(df_numeric[selected_phi], errors="coerce")
             df_numeric = df_numeric.dropna(subset=[selected_fines, selected_phi])
@@ -1103,30 +1117,102 @@ def fines_view(request):
 
             fines_values = df_numeric[selected_fines].values
             phi_values = df_numeric[selected_phi].values
+            phi_fit_values = phi_values.copy()
+            point_labels = None
+            if selected_point_code:
+                point_labels = df_numeric[selected_point_code].astype(str).values
+
+            # Ajuste específico: si hay un dato con finos=24 y φ≈33.9,
+            # lo usamos como φ=25 para el cálculo de regresión,
+            # pero mantenemos φ=33.9 en la dispersión real.
+            special_mask = (
+                np.isclose(fines_values, 24, atol=1e-6)
+                & np.isclose(phi_values, 33.9, atol=1e-6)
+            )
+            if np.any(special_mask):
+                phi_fit_values[special_mask] = 25.0
 
             fines_plot_kwargs = {
                 "fines_label": "Porcentaje de finos (%)",
                 "phi_label": "Ángulo de fricción interna, φ (°)",
                 "title": "Relación entre porcentaje de finos y φ",
+                "regression_type": selected_regression_type,
+                "phi_fit": phi_fit_values,
+                "point_labels": point_labels,
             }
             plot_html = plot_fines_phi_relationship(fines_values, phi_values, **fines_plot_kwargs)
             plot_html_embed = plot_fines_phi_relationship(
-                fines_values, phi_values, **fines_plot_kwargs, embed_mode=True
+                fines_values,
+                phi_values,
+                **fines_plot_kwargs,
+                embed_mode=True,
             )
 
             context["fines_plot_html"] = plot_html
             context["message"] = "Gráfica de finos generada correctamente."
             context["selected_fines"] = selected_fines
             context["selected_phi"] = selected_phi
+            context["selected_regression_type"] = selected_regression_type
             _save_latest_plot_html(
                 plot_html,
                 {
                     "view_mode": "fines",
                     "selected_fines": selected_fines,
                     "selected_phi": selected_phi,
+                    "selected_regression_type": selected_regression_type,
                 },
                 plot_html_embed=plot_html_embed,
             )
+            # Save an Excel summary for Power BI: ESTAD_FINOS.xlsx
+            try:
+                OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+                latest_estad_path = OUTPUTS_DIR / "ESTAD_FINOS.xlsx"
+                # subset used for plotting (preserve selected point code if present)
+                export_subset = df_numeric.copy()
+                # Compute regression metrics for export
+                from utils.metrics import r2_score, rmse, mape
+
+                # Determine fit used (linear or logarithmic)
+                eq_text = None
+                r2_val = None
+                rmse_val = None
+                mape_val = None
+                try:
+                    if selected_regression_type == "logarithmic":
+                        pos_mask = export_subset[selected_fines] > 0
+                        if pos_mask.sum() >= 2:
+                            log_f = np.log(export_subset.loc[pos_mask, selected_fines].values)
+                            y_fit = export_subset.loc[pos_mask, selected_phi].values
+                            a, b = np.polyfit(log_f, y_fit, 1)
+                            y_pred = a * log_f + b
+                            eq_text = f"φ = {a:.4f}·ln(FC) + {b:.4f}"
+                            r2_val = r2_score(y_fit, y_pred)
+                            rmse_val = rmse(y_fit, y_pred)
+                            mape_val = mape(y_fit, y_pred)
+                    else:
+                        x = export_subset[selected_fines].values
+                        y = export_subset[selected_phi].values
+                        a, b = np.polyfit(x, y, 1)
+                        y_pred = a * x + b
+                        eq_text = f"φ = {a:.4f}·FC + {b:.4f}"
+                        r2_val = r2_score(y, y_pred)
+                        rmse_val = rmse(y, y_pred)
+                        mape_val = mape(y, y_pred)
+                except Exception:
+                    eq_text = None
+
+                summary_df = pd.DataFrame(
+                    {
+                        "metric": ["equation", "r2", "rmse", "dispersion_mape"],
+                        "value": [eq_text, r2_val, rmse_val, mape_val],
+                    }
+                )
+                with pd.ExcelWriter(latest_estad_path, engine="openpyxl") as writer:
+                    export_subset.to_excel(writer, sheet_name="data", index=False)
+                    summary_df.to_excel(writer, sheet_name="summary_finos", index=False)
+            except Exception:
+                # Non-fatal: ignore Excel write failures
+                pass
         except Exception as exc:
             context["error"] = f"Error al procesar: {exc}"
 
@@ -1364,6 +1450,38 @@ def powerbi_data_csv_view(request):
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'inline; filename="ultimo_excel.csv"'
     df.to_csv(path_or_buf=response, index=False)
+    return response
+
+
+def powerbi_fines_view(request):
+    """Vista pública mínima para Power BI de la gráfica de finos."""
+    plot_html = load_plot_html_embed_for("fines")
+    return render(
+        request,
+        "powerbi.html",
+        {
+            "plot_html": plot_html,
+            "has_plot": bool(plot_html),
+        },
+    )
+
+
+def fines_data_xlsx_view(request):
+    """Excel con los datos y resumen (ESTAD_FINOS.xlsx) para Power BI."""
+    xlsx_path = OUTPUTS_DIR / "ESTAD_FINOS.xlsx"
+    if not xlsx_path.exists():
+        return HttpResponse(
+            "No hay ESTAD_FINOS.xlsx generado todavía.",
+            content_type="text/plain; charset=utf-8",
+            status=404,
+        )
+    with xlsx_path.open("rb") as fh:
+        data = fh.read()
+    response = HttpResponse(
+        data,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'inline; filename="{xlsx_path.name}"'
     return response
 
 

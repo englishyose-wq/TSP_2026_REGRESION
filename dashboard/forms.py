@@ -18,3 +18,12 @@ class UploadForm(forms.Form):
 
 class FinesUploadForm(forms.Form):
     data_file = forms.FileField(label="Archivo CSV o Excel", required=False)
+    regression_type = forms.ChoiceField(
+        label="Tipo de ajuste",
+        choices=(
+            ("linear", "Lineal"),
+            ("logarithmic", "Logarítmica"),
+        ),
+        initial="linear",
+        required=False,
+    )

@@ -14,6 +14,8 @@ from .views import (
     powerbi_comparison_data_xlsx_view,
     regression_view,
     regression_data_xlsx_view,
+    powerbi_fines_view,
+    fines_data_xlsx_view,
 )
 
 urlpatterns = [
@@ -29,5 +31,7 @@ urlpatterns = [
     path("powerbi/uploaded.xlsx", powerbi_uploaded_excel_view, name="powerbi_uploaded_excel"),
     path("powerbi/data.csv", powerbi_data_csv_view, name="powerbi_data_csv"),
     path("powerbi/data.xlsx", powerbi_data_xlsx_view, name="powerbi_data_xlsx"),
+    path("powerbi/fines/", powerbi_fines_view, name="powerbi_fines"),
+    path("powerbi/fines/data.xlsx", fines_data_xlsx_view, name="powerbi_fines_data_xlsx"),
     path("regression/data.xlsx", regression_data_xlsx_view, name="regression_data_xlsx"),
 ]
