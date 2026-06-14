@@ -198,7 +198,7 @@ def plot_model_comparison(
                     "color": "#111111",
                 },
             },
-            "domain": [0.0, 0.72],
+            "domain": [0.0, 1.0] if embed_mode else [0.0, 0.72],
             "showgrid": True,
             "gridwidth": 1,
             "gridcolor": "#e7e7e7",
