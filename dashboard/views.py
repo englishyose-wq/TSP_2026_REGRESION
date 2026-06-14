@@ -1252,8 +1252,13 @@ def _load_latest_all_sheets():
 
 
 def powerbi_view(request):
-    """Vista pública mínima para Power BI: solo la gráfica limpia."""
-    plot_html = load_plot_html_embed()
+    """Alias a la vista de Power BI de regresión."""
+    return powerbi_regression_view(request)
+
+
+def powerbi_regression_view(request):
+    """Vista pública mínima para Power BI: solo la gráfica de regresión."""
+    plot_html = load_plot_html_embed_for("regression")
     return render(
         request,
         "powerbi.html",
