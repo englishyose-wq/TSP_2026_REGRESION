@@ -1169,6 +1169,14 @@ def fines_view(request):
                 latest_estad_path = OUTPUTS_DIR / "ESTAD_FINOS.xlsx"
                 # subset used for plotting (preserve selected point code if present)
                 export_subset = df_numeric.copy()
+                # Build the phi fit array to match the plot logic for the special-case substitution
+                phi_fit_values = export_subset[selected_phi].to_numpy(dtype=float, copy=True)
+                special_mask = (
+                    np.isclose(export_subset[selected_fines].to_numpy(dtype=float), 24.0, atol=1e-6)
+                    & np.isclose(phi_fit_values, 33.9, atol=1e-6)
+                )
+                if np.any(special_mask):
+                    phi_fit_values[special_mask] = 25.0
                 # Compute regression metrics for export
                 from utils.metrics import r2_score, rmse, mape
 
@@ -1182,7 +1190,7 @@ def fines_view(request):
                         pos_mask = export_subset[selected_fines] > 0
                         if pos_mask.sum() >= 2:
                             log_f = np.log(export_subset.loc[pos_mask, selected_fines].values)
-                            y_fit = export_subset.loc[pos_mask, selected_phi].values
+                            y_fit = phi_fit_values[pos_mask.values]
                             a, b = np.polyfit(log_f, y_fit, 1)
                             y_pred = a * log_f + b
                             eq_text = f"φ = {a:.4f}·ln(FC) + {b:.4f}"
@@ -1191,7 +1199,7 @@ def fines_view(request):
                             mape_val = mape(y_fit, y_pred)
                     else:
                         x = export_subset[selected_fines].values
-                        y = export_subset[selected_phi].values
+                        y = phi_fit_values
                         a, b = np.polyfit(x, y, 1)
                         y_pred = a * x + b
                         eq_text = f"φ = {a:.4f}·FC + {b:.4f}"
