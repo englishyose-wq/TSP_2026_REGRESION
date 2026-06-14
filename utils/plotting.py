@@ -711,6 +711,52 @@ def plot_model_comparison_3d(
             }
         )
 
+    # Build shapes list (avoid nested lists which Plotly rejects)
+    if embed_mode:
+        shapes_list = []
+    else:
+        if title:
+            shapes_list = [
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.0,
+                    "x1": 1.0,
+                    "y0": 1.02,
+                    "y1": 1.14,
+                    "fillcolor": title_band_color,
+                    "line": {"width": 0},
+                },
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.76,
+                    "x1": 1.0,
+                    "y0": 0.0,
+                    "y1": 1.0,
+                    "fillcolor": "rgba(245,247,250,0.95)",
+                    "layer": "below",
+                    "line": {"color": "#c7c7c7", "width": 1},
+                },
+            ]
+        else:
+            shapes_list = [
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": 0.76,
+                    "x1": 1.0,
+                    "y0": 0.0,
+                    "y1": 1.0,
+                    "fillcolor": "rgba(245,247,250,0.95)",
+                    "layer": "below",
+                    "line": {"color": "#c7c7c7", "width": 1},
+                }
+            ]
+
     fig.update_layout(
         title={"text": ""},
         scene={
