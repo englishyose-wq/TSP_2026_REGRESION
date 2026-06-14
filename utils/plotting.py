@@ -33,7 +33,6 @@ def plot_model_comparison(
     
     # Verificar si hay labels para colorear por prefijo (distrito)
     has_labels = point_labels is not None and len(point_labels) > 0 and len(point_labels) == len(x)
-    
     prefix_counts = None
     prefix_order = None
     prefix_color_map = None
@@ -44,14 +43,14 @@ def plot_model_comparison(
             label_str = str(label).strip()
             match = re.match(r"([A-Z]+)", label_str)
             prefix = match.group(1) if match else "OTRO"
-            
+
             if prefix not in prefix_dict:
                 prefix_dict[prefix] = {"indices": [], "labels": []}
             prefix_dict[prefix]["indices"].append(i)
             prefix_dict[prefix]["labels"].append(label_str)
         prefix_counts = {prefix: len(data["indices"]) for prefix, data in prefix_dict.items()}
         prefix_order = list(prefix_dict.keys())
-        
+
         # Paleta de colores por prefijo (distritos)
         color_palette = [
             "#1f4e79",  # Azul oscuro
@@ -65,7 +64,7 @@ def plot_model_comparison(
             "#e2efda",  # Verde claro
             "#fce4d6",  # Salmón
         ]
-        
+
         # Agregar un trace por prefijo con color diferente
         prefix_color_map = {}
         for idx, (prefix, data) in enumerate(prefix_dict.items()):
@@ -73,7 +72,7 @@ def plot_model_comparison(
             labels = data["labels"]
             color = color_palette[idx % len(color_palette)]
             prefix_color_map[prefix] = color
-            
+
             fig.add_trace(
                 go.Scatter(
                     x=x[indices],
@@ -92,6 +91,38 @@ def plot_model_comparison(
                     hovertemplate="%{text}<br>N60: %{x:.2f}<br>φ: %{y:.2f}<extra></extra>",
                 )
             )
+        
+        # Agregar barras de dispersión por grupo con el color del grupo
+        if len(results) > 0:
+            try:
+                best_pred = predict(results[0], x)
+            except ValueError:
+                if results[0].model_type == "sqrt_fines" and fines is not None:
+                    params = results[0].params
+                    best_pred = params["a"] * np.sqrt(x) + params["b"] * fines + params["c"]
+                else:
+                    best_pred = None
+            if best_pred is not None:
+                for prefix, data in prefix_dict.items():
+                    indices = np.array(data["indices"])
+                    color = prefix_color_map[prefix]
+                    line_x = []
+                    line_y = []
+                    for i in indices:
+                        line_x.extend([x[i], x[i], None])
+                        line_y.extend([y[i], best_pred[i], None])
+                    fig.add_trace(
+                        go.Scatter(
+                            x=line_x,
+                            y=line_y,
+                            mode="lines",
+                            name=f"Dispersión {prefix}",
+                            line={"color": color, "width": 1.8, "dash": "dot"},
+                            hoverinfo="skip",
+                            showlegend=False,
+                        )
+                    )
+
     else:
         # Si no hay labels, agregar todos los puntos con un color
         fig.add_trace(
@@ -102,13 +133,43 @@ def plot_model_comparison(
                 name=data_label,
                 marker={
                     "color": "#1f4e79",
-                    "size": 9,
-                    "line": {"color": "#ffffff", "width": 1.2},
+                    "size": 11,
+                    "symbol": "circle",
+                    "line": {"color": "#ffffff", "width": 1.8},
                     "opacity": 0.95,
                 },
                 hovertemplate="N60: %{x:.2f}<br>φ: %{y:.2f}<extra></extra>",
             )
         )
+        
+        # Agregar barras de dispersión en gris (sin labels)
+        if len(results) > 0:
+            try:
+                best_pred = predict(results[0], x)
+            except ValueError:
+                if results[0].model_type == "sqrt_fines" and fines is not None:
+                    params = results[0].params
+                    best_pred = params["a"] * np.sqrt(x) + params["b"] * fines + params["c"]
+                else:
+                    best_pred = None
+            if best_pred is not None:
+                line_x = []
+                line_y = []
+                for xi, yi, ypi in zip(x, y, best_pred):
+                    line_x.extend([xi, xi, None])
+                    line_y.extend([yi, ypi, None])
+                fig.add_trace(
+                    go.Scatter(
+                        x=line_x,
+                        y=line_y,
+                        mode="lines",
+                        name="Dispersión",
+                        line={"color": "#5b5b5b", "width": 1.8, "dash": "dot"},
+                        hoverinfo="skip",
+                        showlegend=False,
+                    )
+                )
+
 
     fines_mean = None
     if fines is not None and len(fines) > 0:
@@ -285,7 +346,7 @@ def plot_model_comparison(
                 }
             ]
         ) if not embed_mode else [],
-        margin={"l": 90, "r": 40, "t": 160, "b": 80},
+        margin={"l": 90, "r": 40, "t": 160 if not embed_mode else 30, "b": 80 if not embed_mode else 40},
         plot_bgcolor="white",
         paper_bgcolor="white",
     )
@@ -438,10 +499,36 @@ def plot_model_comparison_3d(
                     textposition="top center",
                     textfont={"size": 9, "color": color},
                     name=prefix,
-                    marker={"size": 4, "color": color},
+                    marker={"size": 4, "color": color, "symbol": "circle", "line": {"color": "#ffffff", "width": 1}},
                     hovertemplate="%{text}<br>N60: %{x:.2f}<br>Finos (FC, %): %{y:.2f}<br>φ: %{z:.2f}<extra></extra>",
                 )
             )
+        
+        # Agregar barras de dispersión por grupo con el color del grupo
+        params = result.params
+        z_pred = params["a"] * np.sqrt(x) + params["b"] * fines + params["c"]
+        for prefix, data in prefix_dict.items():
+            indices = np.array(data["indices"])
+            color = prefix_color_map[prefix]
+            seg_x = []
+            seg_y = []
+            seg_z = []
+            for i in indices:
+                seg_x.extend([x[i], x[i], None])
+                seg_y.extend([fines[i], fines[i], None])
+                seg_z.extend([y[i], z_pred[i], None])
+            fig.add_trace(
+                go.Scatter3d(
+                    x=seg_x,
+                    y=seg_y,
+                    z=seg_z,
+                    mode="lines",
+                    line={"color": color, "width": 3.5, "dash": "dot"},
+                    hoverinfo="skip",
+                    showlegend=False,
+                )
+            )
+
     else:
         fig.add_trace(
             go.Scatter3d(
@@ -450,10 +537,34 @@ def plot_model_comparison_3d(
                 z=y,
                 mode="markers",
                 name="Datos",
-                marker={"size": 4, "color": "#8b1e3f"},
+                marker={"size": 4, "color": "#8b1e3f", "symbol": "circle", "line": {"color": "#ffffff", "width": 1}},
                 hovertemplate="N60: %{x:.2f}<br>Finos (FC, %): %{y:.2f}<br>φ: %{z:.2f}<extra>Datos</extra>",
             )
         )
+        
+        # Agregar barras de dispersión en gris (sin labels)
+        params = result.params
+        z_pred = params["a"] * np.sqrt(x) + params["b"] * fines + params["c"]
+        if len(x) > 0:
+            seg_x = []
+            seg_y = []
+            seg_z = []
+            for xi, fi, yi, zi in zip(x, fines, y, z_pred):
+                seg_x.extend([xi, xi, None])
+                seg_y.extend([fi, fi, None])
+                seg_z.extend([yi, zi, None])
+            fig.add_trace(
+                go.Scatter3d(
+                    x=seg_x,
+                    y=seg_y,
+                    z=seg_z,
+                    mode="lines",
+                    line={"color": "#5b5b5b", "width": 3.5, "dash": "dot"},
+                    hoverinfo="skip",
+                    showlegend=False,
+                )
+            )
+
 
     title_band_color = "#1f4e79"
     title_text_color = "#ffffff"
@@ -550,10 +661,12 @@ def plot_model_comparison_3d(
                 "gridwidth": 2,
                 "zeroline": False,
             },
-            "domain": {"x": [0.0, 0.72], "y": [0.0, 1.0]},
+            "domain": {"x": [0.0, 1.0], "y": [0.0, 1.0]} if embed_mode else {"x": [0.0, 0.72], "y": [0.0, 1.0]},
+            "aspectmode": "auto",
         },
         scene_dragmode="orbit",
-        margin={"l": 90, "r": 40, "t": 160, "b": 80},
+        margin={"l": 20, "r": 20, "t": 20, "b": 20} if embed_mode else {"l": 90, "r": 40, "t": 160, "b": 80},
+        autosize=True,
         height=640 if not embed_mode else None,
         template="plotly_white",
         font={"family": "Times New Roman, Georgia, serif", "size": 12, "color": "#111111"},
@@ -650,6 +763,7 @@ def plot_model_comparison_3d(
             "displaylogo": False,
             "editable": False,
             "scrollZoom": True,
+            "displayModeBar": False,
             "responsive": True,
         },
     )
@@ -760,7 +874,7 @@ def plot_author_comparison(
                         "width": 2,
                         "dash": dash_styles[color_idx % len(dash_styles)],
                     },
-                    marker={"size": 5},
+                    marker={"size": 7, "symbol": "circle"},
                 )
             )
             color_idx += 1
@@ -815,7 +929,7 @@ def plot_author_comparison(
                 mode="lines+markers",
                 name=_wrap_legend_label(f"{your_column_name}{your_r2_text}"),
                 line={"color": "#8b1e3f", "width": 3.5, "dash": "solid"},
-                marker={"size": 8, "color": "#8b1e3f"},
+                marker={"size": 10, "color": "#8b1e3f", "symbol": "circle", "line": {"color": "#ffffff", "width": 1.5}},
             )
         )
 
@@ -827,13 +941,10 @@ def plot_author_comparison(
                 y=field_points_y,
                 mode="markers",
                 name="Puntos de ensayo",
-                marker={"size": 9, "color": "#111111", "line": {"color": "#ffffff", "width": 1}},
+                marker={"size": 12, "color": "#111111", "line": {"color": "#ffffff", "width": 1.5}, "symbol": "circle"},
             )
         )
-    
-    title_band_color = "#1f4e79"
-    title_text_color = "#ffffff"
-    annotations = []
+
     if title and not embed_mode:
         annotations.append(
             {
@@ -947,7 +1058,7 @@ def plot_author_comparison(
                 ]
             )
         ) if not embed_mode else [],
-        margin={"l": 90, "r": 40, "t": 160, "b": 80},
+        margin={"l": 90, "r": 40, "t": 160 if not embed_mode else 30, "b": 80 if not embed_mode else 40},
     )
     
     if show_fines_band and fines_low is not None and fines_high is not None:
@@ -1043,8 +1154,9 @@ def plot_fines_phi_relationship(
             name="Puntos de datos",
             marker={
                 "color": "#1f4e79",
-                "size": 9,
-                "line": {"color": "#ffffff", "width": 1.2},
+                "size": 11,
+                "symbol": "circle",
+                "line": {"color": "#ffffff", "width": 1.5},
                 "opacity": 0.95,
             },
             hovertemplate=f"{fines_label}: %{{x:.2f}}<br>{phi_label}: %{{y:.2f}}<extra></extra>",
@@ -1222,7 +1334,7 @@ def plot_fines_phi_relationship(
                 }
             ]
         ),
-        margin={"l": 90, "r": 40, "t": 160, "b": 80},
+        margin={"l": 90, "r": 40, "t": 160 if not embed_mode else 30, "b": 80 if not embed_mode else 40},
         height=640 if not embed_mode else None,
         plot_bgcolor="white",
         paper_bgcolor="white",
