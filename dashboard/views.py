@@ -131,9 +131,11 @@ def _build_preview_context(df, post_data=None, sheet_names=None, selected_sheet=
         selected_sheet_value = post_data.get("selected_sheet", selected_sheet_value)
     use_fixed_c = False
     fixed_c_value = ""
+    use_special_phi = False
     if post_data is not None:
         use_fixed_c = post_data.get("use_fixed_c") == "on"
         fixed_c_value = post_data.get("fixed_c_value", "")
+        use_special_phi = post_data.get("use_special_phi") == "on"
 
     default_model_type = "linear"
     if post_data is not None:
@@ -153,6 +155,7 @@ def _build_preview_context(df, post_data=None, sheet_names=None, selected_sheet=
         "selected_model_type": default_model_type,
         "use_fixed_c": use_fixed_c,
         "fixed_c_value": fixed_c_value,
+        "use_special_phi": use_special_phi,
         "excluded_columns": excluded_columns,
         "sheet_options": sheet_options,
         "selected_sheet": selected_sheet_value,
@@ -278,6 +281,7 @@ def _train_one_target(
     point_code_column=None,
     fines_column=None,
     fixed_c=None,
+    use_special_phi=False,
 ):
     if x_column not in df.columns:
         raise ValueError("La columna seleccionada para N<sub>60</sub> no existe en el archivo.")
@@ -285,7 +289,7 @@ def _train_one_target(
         raise ValueError(f"La columna seleccionada para {target_name} no existe en el archivo.")
 
     columns_to_keep = [x_column, target_column]
-    if model_type == "sqrt_fines":
+    if model_type in {"sqrt_fines", "sqrt_log_fines"}:
         if not fines_column:
             raise ValueError("Debes seleccionar la columna de finos para este modelo.")
         if fines_column not in df.columns:
@@ -296,14 +300,14 @@ def _train_one_target(
     
     subset = df[columns_to_keep].copy()
     rename_columns = ["N60", target_name]
-    if model_type == "sqrt_fines":
+    if model_type in {"sqrt_fines", "sqrt_log_fines"}:
         rename_columns.append("fines")
     if point_code_column and point_code_column in df.columns:
         rename_columns.append("point_code")
     subset.columns = rename_columns
     subset["N60"] = pd.to_numeric(subset["N60"], errors="coerce")
     subset[target_name] = pd.to_numeric(subset[target_name], errors="coerce")
-    if model_type == "sqrt_fines":
+    if model_type in {"sqrt_fines", "sqrt_log_fines"}:
         subset["fines"] = pd.to_numeric(subset["fines"], errors="coerce")
         subset = subset.dropna(subset=["N60", target_name, "fines"])
     else:
@@ -317,12 +321,21 @@ def _train_one_target(
     if "point_code" in subset.columns:
         subset = subset.dropna(subset=["point_code"])
 
+    phi_fit_values = subset[target_name].values.copy()
+    if model_type == "sqrt_log_fines" and use_special_phi:
+        special_mask = (
+            np.isclose(subset["fines"].values, 24.0, atol=1e-6)
+            & np.isclose(phi_fit_values, 33.9, atol=1e-6)
+        )
+        if np.any(special_mask):
+            phi_fit_values[special_mask] = 26.5
+
     analysis = analyze_target(
         subset["N60"].values,
-        subset[target_name].values,
+        phi_fit_values,
         target_name,
         model_type=model_type,
-        fines=subset["fines"].values if model_type == "sqrt_fines" else None,
+        fines=subset["fines"].values if model_type in {"sqrt_fines", "sqrt_log_fines"} else None,
         fixed_c=fixed_c,
     )
     best = analysis["best"]
@@ -341,7 +354,7 @@ def _train_one_target(
         "mape_value": best.mape,
         "point_labels": point_labels,
     }
-    if model_type == "sqrt_fines":
+    if model_type in {"sqrt_fines", "sqrt_log_fines"}:
         plot_html = plot_model_comparison_3d(
             subset["N60"].values,
             subset["fines"].values,
@@ -367,7 +380,7 @@ def _train_one_target(
             subset[target_name].values,
             analysis["results"],
             ylabel=ylabel,
-            fines=subset["fines"].values if model_type == "sqrt_fines" else None,
+            fines=subset["fines"].values if model_type in {"sqrt_fines", "sqrt_log_fines"} else None,
             **plot_kwargs,
         )
         plot_html_embed = plot_model_comparison(
@@ -375,7 +388,7 @@ def _train_one_target(
             subset[target_name].values,
             analysis["results"],
             ylabel=ylabel,
-            fines=subset["fines"].values if model_type == "sqrt_fines" else None,
+            fines=subset["fines"].values if model_type in {"sqrt_fines", "sqrt_log_fines"} else None,
             **plot_kwargs,
             embed_mode=True,
         )
@@ -482,6 +495,7 @@ def _dashboard(request, view_mode):
             selected_phi = request.POST.get("selected_phi", "")
             selected_point_code = request.POST.get("selected_point_code", "")
             selected_fines = request.POST.get("selected_fines", "")
+            use_special_phi = request.POST.get("use_special_phi") == "on"
             fixed_c_value = None
             if model_type == "sqrt_fines":
                 fixed_c_value = _parse_fixed_c(request.POST)
@@ -515,6 +529,7 @@ def _dashboard(request, view_mode):
                     point_code_column=selected_point_code if selected_point_code else None,
                     fines_column=selected_fines if selected_fines else None,
                     fixed_c=fixed_c_value,
+                    use_special_phi=use_special_phi,
                 )
                 if result is None:
                     continue
@@ -629,6 +644,7 @@ def regression_view(request):
             selected_phi = request.POST.get("selected_phi", "")
             selected_point_code = request.POST.get("selected_point_code", "")
             selected_fines = request.POST.get("selected_fines", "")
+            use_special_phi = request.POST.get("use_special_phi") == "on"
             fixed_c_value = None
             if model_type == "sqrt_fines":
                 fixed_c_value = _parse_fixed_c(request.POST)
@@ -662,6 +678,7 @@ def regression_view(request):
                     point_code_column=selected_point_code if selected_point_code else None,
                     fines_column=selected_fines if selected_fines else None,
                     fixed_c=fixed_c_value,
+                    use_special_phi=use_special_phi,
                 )
                 if result is None:
                     continue
@@ -1082,6 +1099,7 @@ def fines_view(request):
             selected_fines = request.POST.get("selected_fines", "")
             selected_phi = request.POST.get("selected_phi", "")
             selected_point_code = request.POST.get("selected_point_code", "")
+            use_special_phi = request.POST.get("use_special_phi") == "on"
 
             if not selected_fines:
                 selected_fines = _guess_fines_column(df.columns) or ""
@@ -1093,6 +1111,7 @@ def fines_view(request):
 
             context["selected_regression_type"] = selected_regression_type
             context["selected_point_code"] = selected_point_code
+            context["use_special_phi"] = use_special_phi
 
             if not selected_fines:
                 raise ValueError("Debes seleccionar la columna de finos.")
@@ -1130,7 +1149,7 @@ def fines_view(request):
                 & np.isclose(phi_values, 33.9, atol=1e-6)
             )
             if np.any(special_mask):
-                phi_fit_values[special_mask] = 25.0
+                phi_fit_values[special_mask] = 26.5
 
             fines_plot_kwargs = {
                 "fines_label": "Porcentaje de finos (%)",
@@ -1176,7 +1195,7 @@ def fines_view(request):
                     & np.isclose(phi_fit_values, 33.9, atol=1e-6)
                 )
                 if np.any(special_mask):
-                    phi_fit_values[special_mask] = 25.0
+                    phi_fit_values[special_mask] = 26.5
                 # Compute regression metrics for export
                 from utils.metrics import r2_score, rmse, mape
 

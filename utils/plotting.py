@@ -96,11 +96,14 @@ def plot_model_comparison(
         best_pred = None
         if len(results) > 0:
             try:
-                best_pred = predict(results[0], x)
+                best_pred = predict(results[0], x, fines=fines)
             except ValueError:
-                if results[0].model_type == "sqrt_fines" and fines is not None:
+                if results[0].model_type in {"sqrt_fines", "sqrt_log_fines"} and fines is not None:
                     params = results[0].params
-                    best_pred = params["a"] * np.sqrt(x) + params["b"] * fines + params["c"]
+                    if results[0].model_type == "sqrt_fines":
+                        best_pred = params["a"] * np.sqrt(x) + params["b"] * fines + params["c"]
+                    else:
+                        best_pred = params["a"] * np.sqrt(x) + params["b"] * np.log(fines) + params["c"]
                 else:
                     best_pred = None
             if best_pred is not None:
@@ -147,11 +150,14 @@ def plot_model_comparison(
         best_pred = None
         if len(results) > 0:
             try:
-                best_pred = predict(results[0], x)
+                best_pred = predict(results[0], x, fines=fines)
             except ValueError:
-                if results[0].model_type == "sqrt_fines" and fines is not None:
+                if results[0].model_type in {"sqrt_fines", "sqrt_log_fines"} and fines is not None:
                     params = results[0].params
-                    best_pred = params["a"] * np.sqrt(x) + params["b"] * fines + params["c"]
+                    if results[0].model_type == "sqrt_fines":
+                        best_pred = params["a"] * np.sqrt(x) + params["b"] * fines + params["c"]
+                    else:
+                        best_pred = params["a"] * np.sqrt(x) + params["b"] * np.log(fines) + params["c"]
                 else:
                     best_pred = None
             if best_pred is not None:
@@ -183,6 +189,11 @@ def plot_model_comparison(
                 continue
             y_line = res.params["a"] * np.sqrt(x_line) + res.params["b"] * fines_mean + res.params["c"]
             trace_name = f"{res.name} (FC={fines_mean:.1f})"
+        elif res.model_type == "sqrt_log_fines":
+            if fines_mean is None:
+                continue
+            y_line = res.params["a"] * np.sqrt(x_line) + res.params["b"] * np.log(fines_mean) + res.params["c"]
+            trace_name = res.name
         else:
             y_line = predict(res, x_line)
             trace_name = res.name
@@ -519,7 +530,10 @@ def plot_model_comparison_3d(
     a = result.params["a"]
     b = result.params["b"]
     c = result.params["c"]
-    zz = a * np.sqrt(xx) + b * ff + c
+    if result.model_type == "sqrt_log_fines":
+        zz = a * np.sqrt(xx) + b * np.log(ff) + c
+    else:
+        zz = a * np.sqrt(xx) + b * ff + c
 
     fig = go.Figure()
     fig.add_trace(
@@ -592,7 +606,10 @@ def plot_model_comparison_3d(
         
         # Agregar barras de dispersión por grupo con el color del grupo
         params = result.params
-        z_pred = params["a"] * np.sqrt(x) + params["b"] * fines + params["c"]
+        if result.model_type == "sqrt_log_fines":
+            z_pred = params["a"] * np.sqrt(x) + params["b"] * np.log(fines) + params["c"]
+        else:
+            z_pred = params["a"] * np.sqrt(x) + params["b"] * fines + params["c"]
         for prefix, data in prefix_dict.items():
             indices = np.array(data["indices"])
             color = prefix_color_map[prefix]
@@ -630,7 +647,10 @@ def plot_model_comparison_3d(
         
         # Agregar barras de dispersión en gris (sin labels)
         params = result.params
-        z_pred = params["a"] * np.sqrt(x) + params["b"] * fines + params["c"]
+        if result.model_type == "sqrt_log_fines":
+            z_pred = params["a"] * np.sqrt(x) + params["b"] * np.log(fines) + params["c"]
+        else:
+            z_pred = params["a"] * np.sqrt(x) + params["b"] * fines + params["c"]
         if len(x) > 0:
             seg_x = []
             seg_y = []

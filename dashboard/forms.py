@@ -10,6 +10,7 @@ class UploadForm(forms.Form):
             ("sqrt", "Raíz cuadrada"),
             ("quadratic", "Polinómica de grado 2"),
             ("sqrt_fines", "Raíz cuadrada + finos"),
+            ("sqrt_log_fines", "Raíz cuadrada + log(Finos)"),
         ),
         initial="linear",
         required=False,

@@ -382,6 +382,13 @@
                             </div>
                         </div>
                         <div class="column-field">
+                            <label for="use_special_phi">Reemplazo especial φ para Raíz cuadrada + log(Finos)</label>
+                            <label style="display: inline-flex; gap: 6px; align-items: center; font-weight: normal;">
+                                <input type="checkbox" id="use_special_phi" name="use_special_phi" {% if use_special_phi %}checked{% endif %} />
+                                Aplicar φ=26.5 para el punto especial
+                            </label>
+                        </div>
+                        <div class="column-field">
                             <label for="selected_point_code">Código de punto (opcional)</label>
                             <select id="selected_point_code" name="selected_point_code">
                                 <option value="">No usar</option>

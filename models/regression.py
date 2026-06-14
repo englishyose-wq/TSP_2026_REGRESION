@@ -180,7 +180,32 @@ def fit_sqrt_fines(x, fines, y, fixed_c: float | None = None) -> ModelResult:
     )
 
 
-def predict(result: ModelResult, x):
+def fit_sqrt_log_fines(x, fines, y) -> ModelResult:
+    x = np.asarray(x, dtype=float)
+    fines = np.asarray(fines, dtype=float)
+    y = np.asarray(y, dtype=float)
+    if np.any(x < 0):
+        raise ValueError("No se permite N60 negativo para regresion raiz cuadrada.")
+    if np.any(fines <= 0):
+        raise ValueError("Finos debe ser mayor que cero para regresion logaritmica.")
+    x_sqrt = np.sqrt(x)
+    fines_log = np.log(fines)
+    design = np.column_stack([x_sqrt, fines_log, np.ones_like(x_sqrt)])
+    coeffs, _, _, _ = np.linalg.lstsq(design, y, rcond=None)
+    a, b, c = coeffs
+    y_pred = design @ coeffs
+    equation = f"y = {a:.4f}*sqrt(x) + {b:.4f}*ln(fines) + {c:.4f}"
+    return _build_result(
+        "Raiz cuadrada + log(finos)",
+        "sqrt_log_fines",
+        equation,
+        y,
+        y_pred,
+        {"a": a, "b": b, "c": c},
+    )
+
+
+def predict(result: ModelResult, x, fines=None):
     if result.model_type == "linear":
         a = result.params["a"]
         b = result.params["b"]
@@ -195,7 +220,15 @@ def predict(result: ModelResult, x):
         b = result.params["b"]
         return a * np.sqrt(x) + b
     if result.model_type == "sqrt_fines":
-        raise ValueError("Se requiere fines para predecir con este modelo.")
+        if fines is None:
+            raise ValueError("Se requiere fines para predecir con este modelo.")
+        params = result.params
+        return params["a"] * np.sqrt(x) + params["b"] * fines + params["c"]
+    if result.model_type == "sqrt_log_fines":
+        if fines is None:
+            raise ValueError("Se requiere fines para predecir con este modelo.")
+        params = result.params
+        return params["a"] * np.sqrt(x) + params["b"] * np.log(fines) + params["c"]
     raise ValueError("Modelo no soportado")
 
 
@@ -218,6 +251,10 @@ def fit_models(
         if fines is None:
             raise ValueError("Se requiere la columna de finos para este modelo.")
         results.append(fit_sqrt_fines(x, fines, y, fixed_c=fixed_c))
+    elif model_type == "sqrt_log_fines":
+        if fines is None:
+            raise ValueError("Se requiere la columna de finos para este modelo.")
+        results.append(fit_sqrt_log_fines(x, fines, y))
     else:
         results.append(fit_linear(x, y))
 
@@ -263,6 +300,15 @@ def analyze_target(
             result.equation = (
                 f"{target_label} = {a:.4f}*sqrt(N<sub>60</sub>) "
                 f"{_format_signed_term(b, '*FC')} "
+                f"{_format_signed_term(c, '')}"
+            )
+        elif result.model_type == "sqrt_log_fines":
+            a = result.params["a"]
+            b = result.params["b"]
+            c = result.params["c"]
+            result.equation = (
+                f"{target_label} = {a:.4f}*sqrt(N<sub>60</sub>) "
+                f"{_format_signed_term(b, '*ln(FC)')} "
                 f"{_format_signed_term(c, '')}"
             )
     best = max(results, key=lambda item: item.r2)
