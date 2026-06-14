@@ -8,6 +8,8 @@ SINGLETON_PK = 1
 # Outputs directory (same location as used in views)
 OUTPUTS_DIR = Path(__file__).resolve().parent.parent / "outputs"
 LATEST_COMPARISON_PLOT_PATH = OUTPUTS_DIR / "latest_powerbi_plot_comparison.html"
+LATEST_REGRESSION_PLOT_PATH = OUTPUTS_DIR / "latest_powerbi_plot_regression.html"
+LATEST_FINES_PLOT_PATH = OUTPUTS_DIR / "latest_powerbi_plot_fines.html"
 
 
 def _get_snapshot():
@@ -37,13 +39,17 @@ def load_uploaded_file():
 def save_plot_snapshot(plot_html, metadata=None, plot_html_embed=None):
     if not plot_html:
         return
-    # If this is a comparison plot, persist to a dedicated outputs file
-    # but DO NOT overwrite the DB singleton snapshot so the regression
-    # `/powerbi/` endpoint keeps showing the latest regression plot.
+    view_mode = (metadata or {}).get("view_mode")
     try:
-        if (metadata or {}).get("view_mode") == "comparison":
-            OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        if view_mode == "comparison":
             LATEST_COMPARISON_PLOT_PATH.write_text(plot_html_embed or plot_html, encoding="utf-8")
+            return
+        if view_mode == "regression":
+            LATEST_REGRESSION_PLOT_PATH.write_text(plot_html_embed or plot_html, encoding="utf-8")
+            return
+        if view_mode == "fines":
+            LATEST_FINES_PLOT_PATH.write_text(plot_html_embed or plot_html, encoding="utf-8")
             return
     except Exception:
         # Non-fatal: fall through to DB update if file write fails
@@ -85,6 +91,10 @@ def load_plot_html_embed_for(view_mode: str):
     try:
         if view_mode == "comparison" and LATEST_COMPARISON_PLOT_PATH.exists():
             return LATEST_COMPARISON_PLOT_PATH.read_text(encoding="utf-8")
+        if view_mode == "regression" and LATEST_REGRESSION_PLOT_PATH.exists():
+            return LATEST_REGRESSION_PLOT_PATH.read_text(encoding="utf-8")
+        if view_mode == "fines" and LATEST_FINES_PLOT_PATH.exists():
+            return LATEST_FINES_PLOT_PATH.read_text(encoding="utf-8")
     except Exception:
         pass
 
