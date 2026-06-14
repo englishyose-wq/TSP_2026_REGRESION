@@ -1246,6 +1246,19 @@ def powerbi_excel_view(request):
 
 def powerbi_data_xlsx_view(request):
     """Excel completo con todas las hojas para Power BI."""
+    # Prefer the latest regression Excel (generated when training) if present
+    latest_regression_path = OUTPUTS_DIR / "latest_regression_data.xlsx"
+    if latest_regression_path.exists():
+        with latest_regression_path.open("rb") as fh:
+            data = fh.read()
+        response = HttpResponse(
+            data,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f'inline; filename="{latest_regression_path.name}"'
+        return response
+
+    # Fallback: serve the last uploaded file (original behavior)
     file_bytes, filename, _active_sheet = _load_latest_file()
     if not file_bytes or not filename:
         return HttpResponse(
