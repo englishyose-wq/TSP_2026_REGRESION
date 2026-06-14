@@ -1244,6 +1244,35 @@ def powerbi_excel_view(request):
     )
 
 
+def powerbi_uploaded_excel_view(request):
+    """Último Excel subido por el usuario, para Power BI."""
+    file_bytes, filename, _active_sheet = _load_latest_file()
+    if not file_bytes or not filename:
+        return HttpResponse(
+            "No hay un Excel subido todavía.\n",
+            content_type="text/plain; charset=utf-8",
+            status=404,
+        )
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {".xlsx", ".xls"}:
+        return HttpResponse(
+            "El último archivo subido no es un Excel válido.\n",
+            content_type="text/plain; charset=utf-8",
+            status=400,
+        )
+    content_type = (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        if suffix == ".xlsx"
+        else "application/vnd.ms-excel"
+    )
+    response = HttpResponse(file_bytes, content_type=content_type)
+    response["Content-Disposition"] = f'inline; filename="{Path(filename).name}"'
+    response["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
+    response["Pragma"] = "no-cache"
+    response["Expires"] = "0"
+    return response
+
+
 def powerbi_data_xlsx_view(request):
     """Excel completo con todas las hojas para Power BI."""
     # Prefer the latest regression Excel (generated when training) if present
