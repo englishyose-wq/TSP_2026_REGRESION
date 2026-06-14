@@ -21,6 +21,12 @@
             width: 100% !important;
             height: 100% !important;
         }
+        /* Forzar que cualquier div de plotly dentro de la plantilla use 100% */
+        .plot-only .plotly-graph-div {
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 0 !important;
+        }
     </style>
 </head>
 <body>
@@ -29,5 +35,19 @@
             {{ plot_html|safe }}
         </div>
     {% endif %}
+    <script>
+        // Resize Plotly charts when embedding (Power BI iframe can change size)
+        (function(){
+            function resizeAll(){
+                try{
+                    var plots = document.getElementsByClassName('plotly-graph-div');
+                    for(var i=0;i<plots.length;i++){ var gd = plots[i]; if(window.Plotly) try{ Plotly.Plots.resize(gd); }catch(e){} }
+                }catch(e){}
+            }
+            window.addEventListener('load', resizeAll);
+            window.addEventListener('resize', resizeAll);
+            setTimeout(resizeAll, 500);
+        })();
+    </script>
 </body>
 </html>
