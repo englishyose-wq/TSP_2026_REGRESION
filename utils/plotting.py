@@ -1731,11 +1731,23 @@ def plot_cooks_distance_diagnostic(
         line_dash="dash",
         line_color="#70ad47",
         line_width=2,
-        annotation_text=f"Umbral: 4/n = {threshold:.4f}",
-        annotation_position="right",
-        annotation_font={"color": "#70ad47", "size": 11},
     )
-    
+    fig.add_annotation(
+        xref="paper",
+        yref="y",
+        x=0.5,
+        y=threshold,
+        text=f"Umbral: 4/n = {threshold:.4f}",
+        showarrow=False,
+        font={"color": "#70ad47", "size": 14, "family": "Arial, sans-serif"},
+        bgcolor="rgba(255,255,255,0.9)",
+        bordercolor="#70ad47",
+        borderwidth=1,
+        borderpad=4,
+        xanchor="center",
+        yanchor="bottom",
+    )
+
     # Línea base en cero
     fig.add_hline(
         y=0,
