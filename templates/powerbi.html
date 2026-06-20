@@ -16,14 +16,18 @@
         .plot-only {
             width: 100%;
             min-height: 100vh;
+            height: 100vh;
         }
         .plot-only > div {
             width: 100% !important;
+            min-height: 100vh !important;
+            height: 100vh !important;
         }
         /* Forzar que cualquier div de plotly dentro de la plantilla use 100% */
         .plot-only .plotly-graph-div {
             width: 100% !important;
-            min-height: 420px !important;
+            min-height: 100vh !important;
+            height: 100vh !important;
         }
         .plot-only .modebar,
         .plot-only .modebar-container {

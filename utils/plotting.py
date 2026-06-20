@@ -1757,13 +1757,13 @@ def plot_cooks_distance_diagnostic(
     
     fig.update_layout(
         title={"text": title, "x": 0.5, "xanchor": "center", "font": {"size": 16, "color": "#1a1a1a"}},
-        xaxis={"title": x_label, "gridcolor": "#e0e0e0"},
-        yaxis={"title": "Distancia de Cook", "gridcolor": "#e0e0e0"},
+        xaxis={"title": x_label, "gridcolor": "#e0e0e0", "automargin": True},
+        yaxis={"title": "Distancia de Cook", "gridcolor": "#e0e0e0", "automargin": True},
         hovermode="x unified",
         plot_bgcolor="#fafafa",
         paper_bgcolor="#ffffff",
         height=400,
-        margin={"l": 60, "r": 120, "t": 80, "b": 60},
+        margin={"l": 60, "r": 40, "t": 80, "b": 60},
         font={"family": "Arial, sans-serif", "size": 12, "color": "#1a1a1a"},
         legend={"x": 0.02, "y": 0.98, "bgcolor": "rgba(255,255,255,0.8)", "bordercolor": "#d0d0d0", "borderwidth": 1},
         showlegend=False,
