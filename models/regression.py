@@ -18,6 +18,7 @@ class ModelResult:
     mape: float
     params: dict
     prediction_interval: Optional[np.ndarray] = field(default=None, repr=False)
+    cooks_distance: Optional[np.ndarray] = field(default=None, repr=False)
 
 
 def _calculate_prediction_interval(
@@ -50,7 +51,30 @@ def _calculate_prediction_interval(
 
 
 
-def _build_result(name: str, model_type: str, equation: str, y, y_pred, params):
+def _calculate_cooks_distance(y, y_pred, design_matrix):
+    y = np.asarray(y, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    design_matrix = np.asarray(design_matrix, dtype=float)
+    n = len(y)
+    p = design_matrix.shape[1]
+    if n <= p:
+        return np.zeros(n)
+
+    residuals = y - y_pred
+    sse = np.sum(residuals**2)
+    if sse == 0.0:
+        return np.zeros(n)
+
+    mse_val = sse / float(n - p)
+    xtx_inv = np.linalg.pinv(design_matrix.T @ design_matrix)
+    hat_matrix_diag = np.sum(design_matrix @ xtx_inv * design_matrix, axis=1)
+    denom = (1.0 - hat_matrix_diag) ** 2
+    denom[denom == 0.0] = np.inf
+    cooks = (residuals**2 / (p * mse_val)) * (hat_matrix_diag / denom)
+    return cooks
+
+
+def _build_result(name: str, model_type: str, equation: str, y, y_pred, params, cooks_distance=None):
     return ModelResult(
         name=name,
         model_type=model_type,
@@ -60,6 +84,7 @@ def _build_result(name: str, model_type: str, equation: str, y, y_pred, params):
         rmse=rmse(y, y_pred),
         mape=mape(y, y_pred),
         params=params,
+        cooks_distance=cooks_distance,
     )
 
 
@@ -72,7 +97,16 @@ def fit_linear(x, y) -> ModelResult:
     a, b = np.polyfit(x, y, 1)
     y_pred = a * x + b
     equation = f"y = {a:.4f}*x + {b:.4f}"
-    result = _build_result("Lineal", "linear", equation, y, y_pred, {"a": a, "b": b})
+    design = np.column_stack([x, np.ones_like(x)])
+    result = _build_result(
+        "Lineal",
+        "linear",
+        equation,
+        y,
+        y_pred,
+        {"a": a, "b": b},
+        cooks_distance=_calculate_cooks_distance(y, y_pred, design),
+    )
     
     x_line = np.linspace(np.min(x), np.max(x), 200)
     pred_interval = _calculate_prediction_interval(x, y, y_pred, 2, x_line)
@@ -86,6 +120,8 @@ def fit_quadratic(x, y) -> ModelResult:
     a, b, c = np.polyfit(x, y, 2)
     y_pred = a * x**2 + b * x + c
     equation = f"y = {a:.4f}*x^2 + {b:.4f}*x + {c:.4f}"
+    X_design = np.vstack([x**2, x, np.ones(len(x))]).T
+    y_pred_recalc = X_design @ np.array([a, b, c])
     result = _build_result(
         "Polinómica grado 2",
         "quadratic",
@@ -93,13 +129,11 @@ def fit_quadratic(x, y) -> ModelResult:
         y,
         y_pred,
         {"a": a, "b": b, "c": c},
+        cooks_distance=_calculate_cooks_distance(y, y_pred_recalc, X_design),
     )
 
     x_line = np.linspace(np.min(x), np.max(x), 200)
     y_line = np.polyval([a, b, c], x_line)
-    
-    X_design = np.vstack([x**2, x, np.ones(len(x))]).T
-    y_pred_recalc = X_design @ np.array([a, b, c])
 
     pred_interval = _calculate_prediction_interval(x, y, y_pred_recalc, 3, x_line)
     if pred_interval is not None:
@@ -114,6 +148,7 @@ def fit_sqrt(x, y) -> ModelResult:
     a, b = np.polyfit(x_sqrt, y, 1)
     y_pred = a * x_sqrt + b
     equation = f"y = {a:.4f}*sqrt(x) + {b:.4f}"
+    design = np.column_stack([x_sqrt, np.ones_like(x_sqrt)])
     result = _build_result(
         "Raiz cuadrada",
         "sqrt",
@@ -121,6 +156,7 @@ def fit_sqrt(x, y) -> ModelResult:
         y,
         y_pred,
         {"a": a, "b": b},
+        cooks_distance=_calculate_cooks_distance(y, y_pred, design),
     )
 
     x_line = np.linspace(np.min(x), np.max(x), 200)
@@ -132,23 +168,6 @@ def fit_sqrt(x, y) -> ModelResult:
         result.prediction_interval = np.array([y_line - pred_interval, y_line + pred_interval])
         
     return result
-
-
-def fit_sqrt(x, y) -> ModelResult:
-    if np.any(x < 0):
-        raise ValueError("No se permite N60 negativo para regresion raiz cuadrada.")
-    x_sqrt = np.sqrt(x)
-    a, b = np.polyfit(x_sqrt, y, 1)
-    y_pred = a * x_sqrt + b
-    equation = f"y = {a:.4f}*sqrt(x) + {b:.4f}"
-    return _build_result(
-        "Raiz cuadrada",
-        "sqrt",
-        equation,
-        y,
-        y_pred,
-        {"a": a, "b": b},
-    )
 
 
 def fit_sqrt_fines(x, fines, y, fixed_c: float | None = None) -> ModelResult:
@@ -177,6 +196,7 @@ def fit_sqrt_fines(x, fines, y, fixed_c: float | None = None) -> ModelResult:
         y,
         y_pred,
         {"a": a, "b": b, "c": c, "fixed_c": fixed_c},
+        cooks_distance=_calculate_cooks_distance(y, y_pred, design),
     )
 
 
@@ -202,6 +222,7 @@ def fit_sqrt_log_fines(x, fines, y) -> ModelResult:
         y,
         y_pred,
         {"a": a, "b": b, "c": c},
+        cooks_distance=_calculate_cooks_distance(y, y_pred, design),
     )
 
 

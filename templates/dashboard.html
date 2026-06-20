@@ -240,6 +240,48 @@
         .model-summary strong {
             color: #18324b;
         }
+        .cook-table-wrap {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 12px;
+            background: #fbfcfd;
+            border: 1px solid #d9e2ea;
+        }
+        .cook-table-wrap h3 {
+            margin: 0 0 12px;
+            font-size: 0.98rem;
+            color: #223043;
+        }
+        .cook-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+            color: #2a2a2a;
+        }
+        .cook-table thead {
+            background: #e9f1f8;
+            border-bottom: 2px solid #d6e2ec;
+        }
+        .cook-table th {
+            padding: 10px;
+            text-align: left;
+            font-weight: bold;
+            color: #1f4e79;
+        }
+        .cook-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .cook-table tbody tr:hover {
+            background: #f0f4f8;
+        }
+        .cook-diagnostic-wrap {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 12px;
+            background: #fbfcfd;
+            border: 1px solid #d9e2ea;
+        }
         button {
             background: var(--accent);
             color: white;
@@ -397,6 +439,15 @@
                                 {% endfor %}
                             </select>
                         </div>
+                        <div class="column-field">
+                            <label for="selected_excluded_point">Excluir este punto del ajuste</label>
+                            <select id="selected_excluded_point" name="selected_excluded_point">
+                                <option value="">No excluir</option>
+                                {% for point_value in point_code_values %}
+                                    <option value="{{ point_value }}" {% if point_value == selected_excluded_point %}selected{% endif %}>{{ point_value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
                     </div>
                     <div class="column-field" style="margin-top: 10px;">
                         <label>Excluir columnas (opcional)</label>
@@ -473,9 +524,44 @@
                             <div class="model-summary">
                                 <strong>Modelo:</strong> {{ section.model_name|default:"-" }}<br />
                                 <strong>R²:</strong> {{ section.r2|default:"-" }}<br />
-                                <strong>RMSE:</strong> {{ section.rmse|default:"-" }}
-                                <br /><strong>Dispersión:</strong> {{ section.mape|default:"-" }}%
+                                <strong>RMSE:</strong> {{ section.rmse|default:"-" }}<br />
+                                <strong>Dispersión:</strong> {{ section.mape|default:"-" }}%<br />
+                                <strong>Cook's distance máx.:</strong> {{ section.cooks_distance_max|default:"-" }}
                             </div>
+                            {% if section.cooks_distance_rows %}
+                                <div class="cook-table-wrap">
+                                    <h3>Cook's distance por punto</h3>
+                                    <table class="cook-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Punto</th>
+                                                <th>N<sub>60</sub></th>
+                                                <th>Valor</th>
+                                                <th>Cook</th>
+                                                <th>Dispersión %</th>
+                                                <th>Excluido</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for row in section.cooks_distance_rows %}
+                                                <tr>
+                                                    <td>{{ row.point_code }}</td>
+                                                    <td>{{ row.n60 }}</td>
+                                                    <td>{{ row.target_value }}</td>
+                                                    <td>{{ row.cook_distance|default:"-" }}</td>
+                                                    <td>{{ row.error_percent|floatformat:2 }}%</td>
+                                                    <td>{{ row.excluded|yesno:"Sí,No" }}</td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% endif %}
+                            {% if section.cook_html %}
+                                <div class="cook-diagnostic-wrap">
+                                    {{ section.cook_html|safe }}
+                                </div>
+                            {% endif %}
                         {% else %}
                             <div class="placeholder-box">
                                 <div class="empty-state">

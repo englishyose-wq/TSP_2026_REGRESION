@@ -7,7 +7,7 @@ import pandas as pd
 from django.http import HttpResponse
 from django.shortcuts import render
 
-from models.regression import analyze_target
+from models.regression import analyze_target, predict
 from utils.io import (
     get_excel_sheet_names_from_bytes,
     load_all_dataframes_from_bytes,
@@ -16,6 +16,7 @@ from utils.io import (
 )
 from utils.plotting import (
     plot_author_comparison,
+    plot_cooks_distance_diagnostic,
     plot_fines_phi_relationship,
     plot_model_comparison,
     plot_model_comparison_3d,
@@ -122,6 +123,7 @@ def _build_preview_context(df, post_data=None, sheet_names=None, selected_sheet=
     sheet_options = sheet_names or []
     selected_sheet_value = selected_sheet or (sheet_options[0] if sheet_options else "")
 
+    selected_point_code = ""
     if post_data is not None:
         default_n60 = post_data.get("selected_n60", default_n60)
         default_phi = post_data.get("selected_phi", default_phi)
@@ -129,13 +131,22 @@ def _build_preview_context(df, post_data=None, sheet_names=None, selected_sheet=
         default_fines = post_data.get("selected_fines", default_fines)
         excluded_columns = post_data.getlist("exclude_columns")
         selected_sheet_value = post_data.get("selected_sheet", selected_sheet_value)
+        selected_point_code = post_data.get("selected_point_code", selected_point_code)
+
     use_fixed_c = False
     fixed_c_value = ""
     use_special_phi = False
+    selected_excluded_point = ""
+    point_code_values = []
     if post_data is not None:
         use_fixed_c = post_data.get("use_fixed_c") == "on"
         fixed_c_value = post_data.get("fixed_c_value", "")
         use_special_phi = post_data.get("use_special_phi") == "on"
+        selected_excluded_point = post_data.get("selected_excluded_point", "")
+        if selected_point_code and selected_point_code in columns:
+            point_code_values = sorted(
+                pd.unique(df[selected_point_code].dropna().astype(str)).tolist()
+            )
 
     default_model_type = "linear"
     if post_data is not None:
@@ -156,6 +167,8 @@ def _build_preview_context(df, post_data=None, sheet_names=None, selected_sheet=
         "use_fixed_c": use_fixed_c,
         "fixed_c_value": fixed_c_value,
         "use_special_phi": use_special_phi,
+        "selected_excluded_point": selected_excluded_point,
+        "point_code_values": point_code_values,
         "excluded_columns": excluded_columns,
         "sheet_options": sheet_options,
         "selected_sheet": selected_sheet_value,
@@ -279,6 +292,7 @@ def _train_one_target(
     target_name,
     model_type,
     point_code_column=None,
+    exclude_point_code_value=None,
     fines_column=None,
     fixed_c=None,
     use_special_phi=False,
@@ -298,53 +312,63 @@ def _train_one_target(
     if point_code_column and point_code_column in df.columns:
         columns_to_keep.append(point_code_column)
     
-    subset = df[columns_to_keep].copy()
+    subset_display = df[columns_to_keep].copy()
     rename_columns = ["N60", target_name]
     if model_type in {"sqrt_fines", "sqrt_log_fines"}:
         rename_columns.append("fines")
     if point_code_column and point_code_column in df.columns:
         rename_columns.append("point_code")
-    subset.columns = rename_columns
-    subset["N60"] = pd.to_numeric(subset["N60"], errors="coerce")
-    subset[target_name] = pd.to_numeric(subset[target_name], errors="coerce")
+    subset_display.columns = rename_columns
+    subset_display["N60"] = pd.to_numeric(subset_display["N60"], errors="coerce")
+    subset_display[target_name] = pd.to_numeric(subset_display[target_name], errors="coerce")
     if model_type in {"sqrt_fines", "sqrt_log_fines"}:
-        subset["fines"] = pd.to_numeric(subset["fines"], errors="coerce")
-        subset = subset.dropna(subset=["N60", target_name, "fines"])
+        subset_display["fines"] = pd.to_numeric(subset_display["fines"], errors="coerce")
+        subset_display = subset_display.dropna(subset=["N60", target_name, "fines"])
     else:
-        subset = subset.dropna(subset=["N60", target_name])
+        subset_display = subset_display.dropna(subset=["N60", target_name])
 
-    if subset.empty:
+    if subset_display.empty:
         return None
 
-    
     # Limpiar point_code NaN después de eliminar outliers
-    if "point_code" in subset.columns:
-        subset = subset.dropna(subset=["point_code"])
+    if "point_code" in subset_display.columns:
+        subset_display = subset_display.dropna(subset=["point_code"])
 
-    phi_fit_values = subset[target_name].values.copy()
+    subset_training = subset_display
+    excluded_mask = None
+    if point_code_column and exclude_point_code_value is not None:
+        excluded_mask = subset_display["point_code"].astype(str) == str(exclude_point_code_value)
+        if np.any(excluded_mask):
+            subset_training = subset_display[~excluded_mask].copy()
+        else:
+            excluded_mask = None
+
+    if subset_training.empty:
+        raise ValueError("La exclusión de puntos dejó sin datos para ajustar el modelo.")
+
+    phi_fit_values = subset_training[target_name].values.copy()
     if model_type == "sqrt_log_fines" and use_special_phi:
         special_mask = (
-            np.isclose(subset["fines"].values, 24.0, atol=1e-6)
+            np.isclose(subset_training["fines"].values, 24.0, atol=1e-6)
             & np.isclose(phi_fit_values, 33.9, atol=1e-6)
         )
         if np.any(special_mask):
             phi_fit_values[special_mask] = 26.5
 
     analysis = analyze_target(
-        subset["N60"].values,
+        subset_training["N60"].values,
         phi_fit_values,
         target_name,
         model_type=model_type,
-        fines=subset["fines"].values if model_type in {"sqrt_fines", "sqrt_log_fines"} else None,
+        fines=subset_training["fines"].values if model_type in {"sqrt_fines", "sqrt_log_fines"} else None,
         fixed_c=fixed_c,
     )
+
     best = analysis["best"]
 
+    title = f"Ajuste de regresión para {target_name}"
     ylabel = "Ángulo de fricción interna, φ (°)"
-    title = "Relación entre N<sub>60</sub> y el ángulo de fricción interna, φ (°)"
-
-    point_labels = subset["point_code"].values if "point_code" in subset.columns else None
-    
+    point_labels = subset_display["point_code"].values if "point_code" in subset_display.columns else None
     plot_kwargs = {
         "xlabel": "Número de golpes corregido, N<sub>60</sub>",
         "title": title,
@@ -353,21 +377,22 @@ def _train_one_target(
         "rmse_value": best.rmse,
         "mape_value": best.mape,
         "point_labels": point_labels,
+        "excluded_mask": excluded_mask,
     }
     if model_type in {"sqrt_fines", "sqrt_log_fines"}:
         plot_html = plot_model_comparison_3d(
-            subset["N60"].values,
-            subset["fines"].values,
-            subset[target_name].values,
+            subset_display["N60"].values,
+            subset_display["fines"].values,
+            subset_display[target_name].values,
             best,
             ylabel="Finos (FC, %)",
             zlabel=ylabel,
             **plot_kwargs,
         )
         plot_html_embed = plot_model_comparison_3d(
-            subset["N60"].values,
-            subset["fines"].values,
-            subset[target_name].values,
+            subset_display["N60"].values,
+            subset_display["fines"].values,
+            subset_display[target_name].values,
             best,
             ylabel="Finos (FC, %)",
             zlabel=ylabel,
@@ -376,22 +401,49 @@ def _train_one_target(
         )
     else:
         plot_html = plot_model_comparison(
-            subset["N60"].values,
-            subset[target_name].values,
+            subset_display["N60"].values,
+            subset_display[target_name].values,
             analysis["results"],
             ylabel=ylabel,
-            fines=subset["fines"].values if model_type in {"sqrt_fines", "sqrt_log_fines"} else None,
+            fines=subset_display["fines"].values if model_type in {"sqrt_fines", "sqrt_log_fines"} else None,
             **plot_kwargs,
         )
         plot_html_embed = plot_model_comparison(
-            subset["N60"].values,
-            subset[target_name].values,
+            subset_display["N60"].values,
+            subset_display[target_name].values,
             analysis["results"],
             ylabel=ylabel,
-            fines=subset["fines"].values if model_type in {"sqrt_fines", "sqrt_log_fines"} else None,
+            fines=subset_display["fines"].values if model_type in {"sqrt_fines", "sqrt_log_fines"} else None,
             **plot_kwargs,
             embed_mode=True,
         )
+
+    cooks_distance_max = (
+        float(np.max(best.cooks_distance)) if best.cooks_distance is not None and len(best.cooks_distance) > 0 else None
+    )
+    cook_map = {}
+    excluded_series = None
+    point_labels = None
+    error_percent = None
+    if best.cooks_distance is not None and len(best.cooks_distance) > 0:
+        cook_map = {idx: float(value) for idx, value in zip(subset_training.index, best.cooks_distance)}
+        if excluded_mask is not None:
+            excluded_series = pd.Series(excluded_mask.astype(bool), index=subset_display.index)
+
+        if "point_code" in subset_display.columns:
+            point_labels = subset_display["point_code"].astype(str)
+        else:
+            point_labels = pd.Series([str(i + 1) for i in range(len(subset_display))], index=subset_display.index)
+
+        y_real = subset_display[target_name].values
+        if model_type in {"sqrt_fines", "sqrt_log_fines"}:
+            y_pred = predict(best, subset_display["N60"].values, fines=subset_display["fines"].values)
+        else:
+            y_pred = predict(best, subset_display["N60"].values)
+
+        with np.errstate(divide='ignore', invalid='ignore'):
+            error_percent = np.abs((y_real - y_pred) / y_real * 100)
+            error_percent = np.where(np.isfinite(error_percent), error_percent, 0.0)
 
     # Guardar el subconjunto usado para la regresión como Excel para Power BI
     try:
@@ -410,20 +462,104 @@ def _train_one_target(
             }
         )
         with pd.ExcelWriter(latest_xlsx_path, engine="openpyxl") as writer:
-            subset.to_excel(writer, sheet_name="data", index=False)
+            subset_training.to_excel(writer, sheet_name="data", index=False)
             summary_df.to_excel(writer, sheet_name="summary", index=False)
-    except Exception:
-        # No detener el entrenamiento si la escritura falla; simplemente ignorar
+            if best.cooks_distance is not None and len(best.cooks_distance) > 0:
+                cooks_df = pd.DataFrame(
+                    {
+                        "point_code": point_labels.values,
+                        "n60": subset_display["N60"].values,
+                        target_name: subset_display[target_name].values,
+                        "cook_distance": [cook_map.get(idx) for idx in subset_display.index],
+                        "error_percent": [float(error_percent[list(subset_display.index).index(idx)]) for idx in subset_display.index],
+                        "excluded": [
+                            bool(excluded_series.loc[idx]) if excluded_series is not None else False
+                            for idx in subset_display.index
+                        ],
+                    }
+                )
+                cooks_df.to_excel(writer, sheet_name="cook_distance", index=False)
+    except Exception as exc:
+        # Registrar el error de exportación en caso de falla, para depuración
+        print(f"Error guardando Excel de regresión: {exc}")
         pass
+
+    cooks_distance_rows = []
+    if best.cooks_distance is not None:
+        cook_map = {idx: float(value) for idx, value in zip(subset_training.index, best.cooks_distance)}
+        excluded_series = None
+        if excluded_mask is not None:
+            excluded_series = pd.Series(excluded_mask.astype(bool), index=subset_display.index)
+
+        if "point_code" in subset_display.columns:
+            point_labels = subset_display["point_code"].astype(str)
+        else:
+            point_labels = pd.Series([str(i + 1) for i in range(len(subset_display))], index=subset_display.index)
+
+        # Calcular predicciones para todos los puntos mostrados (subset_display)
+        y_real = subset_display[target_name].values
+        if model_type in {"sqrt_fines", "sqrt_log_fines"}:
+            y_pred = predict(best, subset_display["N60"].values, fines=subset_display["fines"].values)
+        else:
+            y_pred = predict(best, subset_display["N60"].values)
+
+        # Calcular error porcentual individual (MAPE por punto)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            error_percent = np.abs((y_real - y_pred) / y_real * 100)
+            error_percent = np.where(np.isfinite(error_percent), error_percent, 0.0)
+
+        for idx, label in point_labels.items():
+            display_idx = list(subset_display.index).index(idx) if idx in subset_display.index else 0
+            cooks_distance_rows.append(
+                {
+                    "point_code": label,
+                    "n60": float(subset_display.at[idx, "N60"]),
+                    "target_value": float(subset_display.at[idx, target_name]),
+                    "cook_distance": cook_map.get(idx),
+                    "error_percent": float(error_percent[display_idx]),
+                    "excluded": bool(excluded_series.loc[idx]) if excluded_series is not None else False,
+                }
+            )
+        
+        # Generar gráfica de diagnóstico de Cook's distance
+        cook_html = None
+        cook_html_embed = None
+        try:
+            cook_html = plot_cooks_distance_diagnostic(
+                best.cooks_distance,
+                point_labels=subset_display["N60"].values,
+                point_codes=point_labels.values if "point_code" in subset_display.columns else None,
+                excluded_mask=excluded_mask,
+                title=f"Distancia de Cook - {target_name.upper()}",
+                embed_mode=False,
+            )
+            cook_html_embed = plot_cooks_distance_diagnostic(
+                best.cooks_distance,
+                point_labels=subset_display["N60"].values,
+                point_codes=point_labels.values if "point_code" in subset_display.columns else None,
+                excluded_mask=excluded_mask,
+                title=f"Distancia de Cook - {target_name.upper()}",
+                embed_mode=True,
+            )
+        except Exception:
+            # Si falla la gráfica de Cook, continuar sin ella
+            pass
+    else:
+        cook_html = None
+        cook_html_embed = None
 
     return {
         "best": best,
         "plot_html": plot_html,
         "plot_html_embed": plot_html_embed,
+        "cook_html": cook_html,
+        "cook_html_embed": cook_html_embed,
         "equation": best.equation,
         "r2": best.r2,
         "rmse": best.rmse,
         "mape": best.mape,
+        "cooks_distance_max": cooks_distance_max,
+        "cooks_distance_rows": cooks_distance_rows,
         "model_name": best.name,
     }
 
@@ -494,6 +630,7 @@ def _dashboard(request, view_mode):
             selected_n60 = request.POST.get("selected_n60", "")
             selected_phi = request.POST.get("selected_phi", "")
             selected_point_code = request.POST.get("selected_point_code", "")
+            selected_excluded_point = request.POST.get("selected_excluded_point", "")
             selected_fines = request.POST.get("selected_fines", "")
             use_special_phi = request.POST.get("use_special_phi") == "on"
             fixed_c_value = None
@@ -539,10 +676,13 @@ def _dashboard(request, view_mode):
                     {
                         "best": best,
                         "plot_html": result["plot_html"],
+                        "cook_html": result.get("cook_html"),
                         "equation": result["equation"],
                         "r2": result["r2"],
                         "rmse": result["rmse"],
                         "mape": result["mape"],
+                        "cooks_distance_max": result.get("cooks_distance_max"),
+                        "cooks_distance_rows": result.get("cooks_distance_rows", []),
                         "model_name": result["model_name"],
                     }
                 )
@@ -558,6 +698,19 @@ def _dashboard(request, view_mode):
                     },
                     plot_html_embed=result["plot_html_embed"],
                 )
+                if result.get("cook_html_embed"):
+                    _save_latest_plot_html(
+                        result["cook_html"],
+                        {
+                            "view_mode": "cook",
+                            "equation": result["equation"],
+                            "r2": result["r2"],
+                            "rmse": result["rmse"],
+                            "mape": result["mape"],
+                            "model_name": result["model_name"],
+                        },
+                        plot_html_embed=result["cook_html_embed"],
+                    )
 
             context["sections"] = list(sections.values())
 
@@ -643,6 +796,7 @@ def regression_view(request):
             selected_n60 = request.POST.get("selected_n60", "")
             selected_phi = request.POST.get("selected_phi", "")
             selected_point_code = request.POST.get("selected_point_code", "")
+            selected_excluded_point = request.POST.get("selected_excluded_point", "")
             selected_fines = request.POST.get("selected_fines", "")
             use_special_phi = request.POST.get("use_special_phi") == "on"
             fixed_c_value = None
@@ -676,6 +830,7 @@ def regression_view(request):
                     target_name,
                     model_type,
                     point_code_column=selected_point_code if selected_point_code else None,
+                    exclude_point_code_value=selected_excluded_point if selected_excluded_point and selected_point_code else None,
                     fines_column=selected_fines if selected_fines else None,
                     fixed_c=fixed_c_value,
                     use_special_phi=use_special_phi,
@@ -688,10 +843,13 @@ def regression_view(request):
                     {
                         "best": best,
                         "plot_html": result["plot_html"],
+                        "cook_html": result.get("cook_html"),
                         "equation": result["equation"],
                         "r2": result["r2"],
                         "rmse": result["rmse"],
                         "mape": result["mape"],
+                        "cooks_distance_max": result.get("cooks_distance_max"),
+                        "cooks_distance_rows": result.get("cooks_distance_rows", []),
                         "model_name": result["model_name"],
                     }
                 )
@@ -707,6 +865,19 @@ def regression_view(request):
                     },
                     plot_html_embed=result["plot_html_embed"],
                 )
+                if result.get("cook_html_embed"):
+                    _save_latest_plot_html(
+                        result["cook_html"],
+                        {
+                            "view_mode": "cook",
+                            "equation": result["equation"],
+                            "r2": result["r2"],
+                            "rmse": result["rmse"],
+                            "mape": result["mape"],
+                            "model_name": result["model_name"],
+                        },
+                        plot_html_embed=result["cook_html_embed"],
+                    )
 
             context["sections"] = list(sections.values())
 
@@ -1273,6 +1444,19 @@ def _load_latest_all_sheets():
 def powerbi_view(request):
     """Alias a la vista de Power BI de regresión."""
     return powerbi_regression_view(request)
+
+
+def powerbi_cook_view(request):
+    """Vista pública mínima para Power BI del gráfico de Cook."""
+    plot_html = load_plot_html_embed_for("cook")
+    return render(
+        request,
+        "powerbi.html",
+        {
+            "plot_html": plot_html,
+            "has_plot": bool(plot_html),
+        },
+    )
 
 
 def powerbi_regression_view(request):

@@ -23,6 +23,7 @@ def plot_model_comparison(
     mape_value: float | None = None,
     data_label: str = "Datos experimentales",
     point_labels: np.ndarray | None = None,
+    excluded_mask: np.ndarray | None = None,
     fines: np.ndarray | None = None,
     embed_mode: bool = False,
 ):
@@ -182,6 +183,26 @@ def plot_model_comparison(
     fines_mean = None
     if fines is not None and len(fines) > 0:
         fines_mean = float(np.mean(fines))
+
+    if excluded_mask is not None and len(excluded_mask) == len(x):
+        excluded_mask = np.asarray(excluded_mask, dtype=bool)
+        excluded_indices = np.where(excluded_mask)[0]
+        if excluded_indices.size > 0:
+            fig.add_trace(
+                go.Scatter(
+                    x=x[excluded_indices],
+                    y=y[excluded_indices],
+                    mode="markers",
+                    name="Puntos excluidos",
+                    marker={
+                        "color": "#000000",
+                        "size": 12,
+                        "symbol": "x",
+                        "line": {"color": "#ffffff", "width": 2},
+                    },
+                    hovertemplate="N60: %{x:.2f}<br>φ: %{y:.2f}<extra></extra>",
+                )
+            )
 
     for res in results:
         if res.model_type == "sqrt_fines":
@@ -517,6 +538,7 @@ def plot_model_comparison_3d(
     rmse_value: float | None = None,
     mape_value: float | None = None,
     point_labels: np.ndarray | None = None,
+    excluded_mask: np.ndarray | None = None,
     embed_mode: bool = False,
 ):
     x = np.asarray(x, dtype=float)
@@ -668,6 +690,27 @@ def plot_model_comparison_3d(
                     line={"color": "#5b5b5b", "width": 3.5, "dash": "dot"},
                     hoverinfo="skip",
                     showlegend=False,
+                )
+            )
+
+    if excluded_mask is not None and len(excluded_mask) == len(x):
+        excluded_mask = np.asarray(excluded_mask, dtype=bool)
+        excluded_indices = np.where(excluded_mask)[0]
+        if excluded_indices.size > 0:
+            fig.add_trace(
+                go.Scatter3d(
+                    x=x[excluded_indices],
+                    y=fines[excluded_indices],
+                    z=y[excluded_indices],
+                    mode="markers",
+                    name="Puntos excluidos",
+                    marker={
+                        "color": "#000000",
+                        "size": 6,
+                        "symbol": "x",
+                        "line": {"color": "#ffffff", "width": 1.5},
+                    },
+                    hovertemplate="N60: %{x:.2f}<br>Finos (FC, %): %{y:.2f}<br>φ: %{z:.2f}<extra></extra>",
                 )
             )
 
@@ -1606,6 +1649,140 @@ def plot_fines_phi_relationship(
             "responsive": True,
         },
     )
+
+
+def plot_cooks_distance_diagnostic(
+    cooks_distance: np.ndarray,
+    point_labels: np.ndarray | None = None,
+    point_codes: np.ndarray | None = None,
+    excluded_mask: np.ndarray | None = None,
+    title: str = "Distancia de Cook por Punto",
+    embed_mode: bool = False,
+):
+    """
+    Grafica Cook's distance de cada punto con línea de umbral 4/n.
+    
+    Args:
+        cooks_distance: array de valores de Cook's distance
+        point_labels: etiquetas de puntos (ej: N60 values)
+        point_codes: códigos de punto (ej: CH-1, CH-2)
+        excluded_mask: máscara de puntos excluidos
+        title: título de la gráfica
+        embed_mode: si True, retorna HTML embebido (sin CDN)
+    """
+    cooks_distance = np.asarray(cooks_distance, dtype=float)
+    n = len(cooks_distance)
+    threshold = 4.0 / n  # Umbral estándar de diagnóstico
+    
+    # Usar códigos de punto en eje X, o números de corrida si no están disponibles
+    if point_codes is not None:
+        x_axis = np.asarray(point_codes, dtype=str)
+        x_label = "Código de Punto"
+    else:
+        x_axis = np.arange(1, n + 1)
+        x_label = "Número de corrida"
+    
+    # Preparar etiquetas adicionales para hover
+    if point_codes is not None and point_labels is not None:
+        hover_text = [f"{pc}<br>N60: {float(pl):.2f}" for pc, pl in zip(point_codes, point_labels)]
+    elif point_labels is not None:
+        hover_text = [f"N60: {float(pl):.2f}" for pl in point_labels]
+    elif point_codes is not None:
+        hover_text = [str(pc) for pc in point_codes]
+    else:
+        hover_text = [f"Punto {i}" for i in range(1, n + 1)]
+    
+    # Determinar colores: rojo si excluido, naranja si > umbral, azul si normal
+    colors = []
+    if excluded_mask is not None:
+        excluded_mask = np.asarray(excluded_mask, dtype=bool)
+        for i, (cook, excl) in enumerate(zip(cooks_distance, excluded_mask)):
+            if excl:
+                colors.append("#c00000")  # Rojo: excluido
+            elif cook > threshold:
+                colors.append("#ffc000")  # Naranja: influyente
+            else:
+                colors.append("#1f4e79")  # Azul: normal
+    else:
+        for cook in cooks_distance:
+            if cook > threshold:
+                colors.append("#ffc000")  # Naranja: influyente
+            else:
+                colors.append("#1f4e79")  # Azul: normal
+    
+    fig = go.Figure()
+    
+    # Puntos de Cook's distance
+    fig.add_trace(
+        go.Scatter(
+            x=x_axis,
+            y=cooks_distance,
+            mode="markers",
+            marker={"color": colors, "size": 8, "line": {"color": "#ffffff", "width": 0.5}},
+            text=hover_text,
+            hovertemplate="%{x}<br>%{text}<br>Cook: %{y:.4f}<extra></extra>",
+            name="Cook's distance",
+        )
+    )
+    
+    # Línea de umbral (punteada)
+    fig.add_hline(
+        y=threshold,
+        line_dash="dash",
+        line_color="#70ad47",
+        line_width=2,
+        annotation_text=f"Umbral: 4/n = {threshold:.4f}",
+        annotation_position="right",
+        annotation_font={"color": "#70ad47", "size": 11},
+    )
+    
+    # Línea base en cero
+    fig.add_hline(
+        y=0,
+        line_color="#cccccc",
+        line_width=1,
+    )
+    
+    fig.update_layout(
+        title={"text": title, "x": 0.5, "xanchor": "center", "font": {"size": 16, "color": "#1a1a1a"}},
+        xaxis={"title": x_label, "gridcolor": "#e0e0e0"},
+        yaxis={"title": "Distancia de Cook", "gridcolor": "#e0e0e0"},
+        hovermode="x unified",
+        plot_bgcolor="#fafafa",
+        paper_bgcolor="#ffffff",
+        height=400,
+        margin={"l": 60, "r": 120, "t": 80, "b": 60},
+        font={"family": "Arial, sans-serif", "size": 12, "color": "#1a1a1a"},
+        legend={"x": 0.02, "y": 0.98, "bgcolor": "rgba(255,255,255,0.8)", "bordercolor": "#d0d0d0", "borderwidth": 1},
+        showlegend=False,
+    )
+    
+    if embed_mode:
+        return fig.to_html(
+            div_id="cook-diagnostic-plot",
+            include_plotlyjs="cdn",
+            full_html=False,
+            config={
+                "displayModeBar": False,
+                "displaylogo": False,
+                "editable": False,
+                "scrollZoom": False,
+                "responsive": True,
+            },
+        )
+    else:
+        return to_html(
+            fig,
+            div_id="cook-diagnostic-plot",
+            include_plotlyjs="cdn",
+            config={
+                "displayModeBar": False,
+                "displaylogo": False,
+                "editable": False,
+                "scrollZoom": False,
+                "responsive": True,
+            },
+        )
 
 
 def save_fig(fig, path: Path) -> None:

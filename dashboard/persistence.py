@@ -10,6 +10,7 @@ OUTPUTS_DIR = Path(__file__).resolve().parent.parent / "outputs"
 LATEST_COMPARISON_PLOT_PATH = OUTPUTS_DIR / "latest_powerbi_plot_comparison.html"
 LATEST_REGRESSION_PLOT_PATH = OUTPUTS_DIR / "latest_powerbi_plot_regression.html"
 LATEST_FINES_PLOT_PATH = OUTPUTS_DIR / "latest_powerbi_plot_fines.html"
+LATEST_COOK_PLOT_PATH = OUTPUTS_DIR / "latest_powerbi_plot_cook.html"
 
 
 def _get_snapshot():
@@ -50,6 +51,9 @@ def save_plot_snapshot(plot_html, metadata=None, plot_html_embed=None):
             return
         if view_mode == "fines":
             LATEST_FINES_PLOT_PATH.write_text(plot_html_embed or plot_html, encoding="utf-8")
+            return
+        if view_mode == "cook":
+            LATEST_COOK_PLOT_PATH.write_text(plot_html_embed or plot_html, encoding="utf-8")
             return
     except Exception:
         # Non-fatal: fall through to DB update if file write fails
@@ -95,6 +99,8 @@ def load_plot_html_embed_for(view_mode: str):
             return LATEST_REGRESSION_PLOT_PATH.read_text(encoding="utf-8")
         if view_mode == "fines" and LATEST_FINES_PLOT_PATH.exists():
             return LATEST_FINES_PLOT_PATH.read_text(encoding="utf-8")
+        if view_mode == "cook" and LATEST_COOK_PLOT_PATH.exists():
+            return LATEST_COOK_PLOT_PATH.read_text(encoding="utf-8")
     except Exception:
         pass
 
